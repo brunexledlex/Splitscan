@@ -148,7 +148,11 @@ Honest about what this is:
 
 - **The on-device camera path is the least-tested part.** The geometry, the
   layout down to iPhone SE size, and every mode/drive/blade combination were
-  verified; a real camera on real glass was not.
+  verified; a real camera on real glass was not. Two iOS-specific bugs have been
+  found and fixed on the way — a `display:none` video that Safari refuses to
+  decode, and reading `videoWidth` before metadata arrives (measured at 101ms,
+  which the old code read as zero) — but both were caught by reasoning and by
+  exercising the video-file path, not by pointing a phone at anything.
 - Stills only. No video export, no recording of a scan as a movie.
 - Settings do not persist between launches.
 - Strip mode does a full-canvas copy per frame — the heaviest path, and the

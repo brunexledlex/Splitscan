@@ -67,7 +67,13 @@ readouts, a control deck below.
 The deck has a compact tier under `700px` of viewport height, because on an
 iPhone SE the full deck was **taller than the viewfinder** — 323px of controls
 against 295px of image. For a camera that is simply the wrong ratio, whatever it
-measures at on a larger phone. The compact tier puts it back to 269 against 349.
+measures at on a larger phone. The compact tier put it back to 269 against 349;
+losing the speed slider has shortened it further since.
+
+Collapsing the deck is real, and was not at first: `.collapsible` carried an
+inline `display:flex` that silently beat the `display:none` rule, so the grab
+handle did nothing for a while. Fixed, collapsing drops the deck to ~131px and
+leaves the angle and the mode row.
 
 ## The one bold thing
 
@@ -98,10 +104,22 @@ canvas holds zero non-ground pixels while the overlay holds ~8,000.
 machine is driving is disabled but keeps moving, and turns amber. A dead grey
 control tells you nothing; a moving one shows you the machine working.
 
-**Labels change with the geometry.** `Speed` is not a universal quantity here —
-it is `Travel` in px/s for Sweep and `Spin` in °/s for Radial. Naming them the
-same thing would be a lie about what the number does. Same for `Slit` / `Blade` /
-`Rate`.
+**Labels change with the geometry.** The width control is not one quantity — it
+is `Slit` in px for Sweep, `Blade` in degrees for Radial, `Rate` in px per frame
+for Strip. Naming them all "width" would be a lie about what the number does.
+
+**Rate has no control at all.** There was a speed slider; it is gone. Each
+geometry now runs at a fixed rate in its own units — 200 px/s for Sweep, 40°/s
+for Radial, 20°/s for Strip. One shared number was never possible, because they
+are not the same quantity: a value that suits a spin makes a sweep crawl. Given
+the choice between three sliders for one idea and three good constants, the
+constants won, and Manual mode is where speed actually wants to be expressed
+anyway — with your thumb.
+
+**Angle sits directly under the image**, above even the mode selector, and it is
+the only control outside the collapsible deck. Collapse everything else and you
+still have the slit angle: the smallest useful version of this instrument is a
+picture and an angle.
 
 **A demo source that runs before permissions.** The app does something the
 instant it opens, without asking for the camera first. Asking for a permission

@@ -98,6 +98,9 @@ button{background:none;border:0;padding:0;cursor:pointer}
   padding:10px 14px var(--deck-pad);
   display:flex; flex-direction:column; gap:10px;
 }
+/* must live here, not inline: an inline display:flex would beat the
+   collapsed rule below and the grab handle would do nothing */
+.collapsible{display:flex;flex-direction:column;gap:10px}
 .deck.collapsed .collapsible{display:none}
 
 .segrow{display:flex;gap:8px;align-items:center}
@@ -124,7 +127,6 @@ button{background:none;border:0;padding:0;cursor:pointer}
   text-transform:none;   /* units are lowercase: 40°/s, not 40°/S */
 }
 .ctl.driven .ctl-head,.ctl.driven output{color:var(--amber)}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
 
 input[type=range]{
   -webkit-appearance:none;appearance:none;width:100%;height:22px;background:none;margin:0;
@@ -156,6 +158,10 @@ input[type=range]:disabled{opacity:1}
   margin:-4px 0 2px;flex:0 0 auto;
 }
 
+/* the source video: on-screen so iOS keeps decoding it, but invisible */
+#vid{position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:.01;
+  pointer-events:none;z-index:-1;object-fit:cover}
+
 .toast{
   position:fixed;left:50%;bottom:calc(50% - 20px);transform:translateX(-50%);
   background:var(--raised);border:1px solid var(--amber);color:var(--ink);
@@ -170,10 +176,9 @@ input[type=range]:disabled{opacity:1}
 /* short phones: the viewfinder must stay bigger than the controls */
 @media (max-height:700px){
   .deck{gap:7px;padding:7px 12px var(--deck-pad)}
-  .deck .collapsible{gap:7px !important}
+  .collapsible{gap:7px}
   .seg button{padding:6px 4px}
   .ctl{gap:2px}
-  .grid2{gap:6px 12px}
   input[type=range]{height:18px}
   input[type=range]::-webkit-slider-thumb{height:18px;margin-top:-8px}
   input[type=range]::-moz-range-thumb{height:18px}
@@ -205,6 +210,13 @@ input[type=range]:disabled{opacity:1}
 <div class="deck" id="deck">
   <button class="grab" id="grab" aria-label="Collapse controls"></button>
 
+  <!-- the primary control, sitting straight under the image; outside
+       .collapsible so it survives collapsing the rest of the deck -->
+  <div class="ctl" id="ctlAngle">
+    <div class="ctl-head"><span>Angle</span><output id="oAngle">0°</output></div>
+    <input type="range" id="sAngle" min="0" max="360" step="0.5" value="0" aria-label="Slit angle">
+  </div>
+
   <div class="segrow">
     <div class="seg" id="segMode" role="group" aria-label="Slit geometry">
       <button data-mode="sweep">Sweep</button>
@@ -213,7 +225,7 @@ input[type=range]:disabled{opacity:1}
     </div>
   </div>
 
-  <div class="collapsible" style="display:flex;flex-direction:column;gap:10px">
+  <div class="collapsible">
 
     <div class="segrow">
       <div class="seg" id="segDrive" role="group" aria-label="Drive">
@@ -228,25 +240,14 @@ input[type=range]:disabled{opacity:1}
       </div>
     </div>
 
-    <div class="ctl" id="ctlAngle">
-      <div class="ctl-head"><span>Angle</span><output id="oAngle">0°</output></div>
-      <input type="range" id="sAngle" min="0" max="360" step="0.5" value="0" aria-label="Slit angle">
-    </div>
-
     <div class="ctl" id="ctlPos" hidden>
       <div class="ctl-head"><span>Position</span><output id="oPos">50%</output></div>
       <input type="range" id="sPos" min="0" max="100" step="0.2" value="50" aria-label="Sweep position">
     </div>
 
-    <div class="grid2">
-      <div class="ctl">
-        <div class="ctl-head"><span id="lSpeed">Speed</span><output id="oSpeed">40°/s</output></div>
-        <input type="range" id="sSpeed" min="1" max="360" step="1" value="40" aria-label="Speed">
-      </div>
-      <div class="ctl">
-        <div class="ctl-head"><span id="lWidth">Blade</span><output id="oWidth">2.0°</output></div>
-        <input type="range" id="sWidth" min="0.2" max="20" step="0.1" value="2" aria-label="Slit width">
-      </div>
+    <div class="ctl">
+      <div class="ctl-head"><span id="lWidth">Blade</span><output id="oWidth">2.0°</output></div>
+      <input type="range" id="sWidth" min="1" max="20" step="1" value="2" aria-label="Slit width">
     </div>
 
     <div class="actions">
@@ -271,7 +272,9 @@ input[type=range]:disabled{opacity:1}
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<video id="vid" playsinline muted loop hidden></video>
+<!-- NOT hidden: iOS Safari won't decode frames from a display:none video,
+     so drawImage would silently paint nothing. Kept in the layout, invisible. -->
+<video id="vid" playsinline muted loop autoplay></video>
 <input type="file" id="file" accept="video/*" hidden>
 
 <script>
@@ -600,12 +603,26 @@ function stopStream(){
   if (src.stream){ src.stream.getTracks().forEach(t => t.stop()); src.stream = null; }
 }
 function useDemo(){
-  stopStream(); video.removeAttribute('src'); video.load?.();
+  stopStream(); video.srcObject = null; video.removeAttribute('src'); video.load?.();
   src.el = demoCv; src.w = demoCv.width; src.h = demoCv.height;
   src.kind = 'demo'; src.mirror = false;
   $('hint').style.display = 'none';
   resize(); clearAcc();
 }
+/* iOS resolves play() before metadata arrives, so videoWidth is still 0 and
+   both resize() and drawSource() bail out — a live stream on a black canvas.
+   Wait for real dimensions before treating the video as a source. */
+function waitForFrames(ms = 8000){
+  return new Promise((res, rej) => {
+    const t0 = performance.now();
+    (function check(){
+      if (video.videoWidth > 0 && video.videoHeight > 0) return res();
+      if (performance.now() - t0 > ms) return rej(new Error('NoFrames'));
+      requestAnimationFrame(check);
+    })();
+  });
+}
+
 async function useCamera(facing){
   if (!navigator.mediaDevices?.getUserMedia){
     toast(window.isSecureContext ? 'This browser has no camera API.'
@@ -613,33 +630,47 @@ async function useCamera(facing){
   }
   try{
     stopStream();
+    toast('Starting camera…', 8000);
     const stream = await navigator.mediaDevices.getUserMedia({
       video:{ facingMode: facing, width:{ideal:1280}, height:{ideal:720} }, audio:false });
     src.stream = stream; src.facing = facing;
+    video.removeAttribute('src');            // clear any previous file source
     video.srcObject = stream;
-    await video.play();
+    await video.play().catch(() => {});      // iOS may reject; frames still come
+    await waitForFrames();
     src.el = video; src.w = video.videoWidth; src.h = video.videoHeight;
     src.kind = 'camera'; src.mirror = (facing === 'user');
     $('hint').style.display = 'none';
     resize(); clearAcc();
-    toast(facing === 'user' ? 'Front camera live' : 'Rear camera live', 1400);
+    toast(`${facing === 'user' ? 'Front' : 'Rear'} camera · ${src.w}×${src.h}`, 1600);
   } catch(e){
-    toast(e && e.name === 'NotAllowedError'
-      ? 'Camera blocked. Allow it in Safari settings and try again.'
-      : 'Couldn’t open the camera: ' + (e && e.name ? e.name : 'unknown'));
+    stopStream();
+    const n = e && e.name;
+    toast(
+      n === 'NotAllowedError' ? 'Camera blocked. Safari ▸ aA ▸ Website Settings ▸ Camera ▸ Allow, then reload.'
+      : n === 'NotFoundError' ? 'No camera found on this device.'
+      : n === 'NotReadableError' ? 'Camera is busy — close other apps using it.'
+      : e && e.message === 'NoFrames' ? 'Camera opened but sent no frames. Reload and try again.'
+      : 'Couldn’t open the camera: ' + (n || 'unknown'), 5000);
   }
 }
-function useFile(f){
+async function useFile(f){
   stopStream();
   video.srcObject = null;
-  video.src = URL.createObjectURL(f);
-  video.onloadedmetadata = () => {
-    video.play();
+  const url = URL.createObjectURL(f);
+  video.src = url;
+  try{
+    await video.play().catch(() => {});
+    await waitForFrames();                   // same iOS metadata race as camera
     src.el = video; src.w = video.videoWidth; src.h = video.videoHeight;
     src.kind = 'file'; src.mirror = false;
     $('hint').style.display = 'none';
     resize(); clearAcc();
-  };
+    toast(`${f.name} · ${src.w}×${src.h}`, 1600);
+  } catch(e){
+    URL.revokeObjectURL(url);
+    toast('Couldn’t read that video. Try a different file.', 4000);
+  }
 }
 
 /* ── mode plumbing ────────────────────────────────────────────────── */
@@ -656,21 +687,25 @@ function applyMode(){
   $('segBlades').style.display = radial ? '' : 'none';
   $('ctlPos').hidden = !sweep;
 
-  // speed and width mean different things per geometry — label them honestly
+  // width means a different thing per geometry — label it honestly.
+  // speed has no control any more, so each geometry gets a fixed rate in
+  // its own units: px/s for Sweep, °/s for Radial and Strip.
+  // width steps in whole units, never fractions
   if (sweep){
-    $('lSpeed').textContent = 'Travel'; $('lWidth').textContent = 'Slit';
-    $('sSpeed').min = 5;  $('sSpeed').max = 1200; if (S.speed < 5) S.speed = 200;
-    $('sWidth').min = .5; $('sWidth').max = 60;
+    $('lWidth').textContent = 'Slit';
+    S.speed = 200;
+    $('sWidth').min = 1; $('sWidth').max = 60;   S.width = clamp(S.width, 1, 60);
   } else if (radial){
-    $('lSpeed').textContent = 'Spin';   $('lWidth').textContent = 'Blade';
-    $('sSpeed').min = 1;  $('sSpeed').max = 360; S.speed = clamp(S.speed, 1, 360);
-    $('sWidth').min = .2; $('sWidth').max = 20;  S.width = clamp(S.width, .2, 20);
+    $('lWidth').textContent = 'Blade';
+    S.speed = 40;
+    $('sWidth').min = 1; $('sWidth').max = 20;   S.width = clamp(S.width, 1, 20);
   } else {
-    $('lSpeed').textContent = 'Spin';   $('lWidth').textContent = 'Rate';
-    $('sSpeed').min = 0;  $('sSpeed').max = 180; S.speed = clamp(S.speed, 0, 180);
-    $('sWidth').min = .5; $('sWidth').max = 12;  S.width = clamp(S.width, .5, 12);
+    $('lWidth').textContent = 'Rate';
+    S.speed = 20;
+    $('sWidth').min = 1; $('sWidth').max = 12;   S.width = clamp(S.width, 1, 12);
   }
-  $('sSpeed').value = S.speed; $('sWidth').value = S.width;
+  S.width = Math.round(S.width);
+  $('sWidth').value = S.width;
   applyDrive(); syncUnits(); clearAcc();
 }
 function applyDrive(){
@@ -688,10 +723,8 @@ function applyDrive(){
   if (other) other.classList.remove('driven');
 }
 function syncUnits(){
-  $('oSpeed').textContent = S.mode === 'sweep'
-    ? S.speed.toFixed(0) + ' px/s' : S.speed.toFixed(0) + '°/s';
   $('oWidth').textContent = S.mode === 'radial'
-    ? S.width.toFixed(1) + '°' : S.width.toFixed(1) + ' px';
+    ? S.width.toFixed(0) + '°' : S.width.toFixed(0) + ' px';
   $('oAngle').textContent = S.angle.toFixed(0) + '°';
   $('oPos').textContent   = S.pos.toFixed(0) + '%';
 }
@@ -717,8 +750,7 @@ $('sAngle').addEventListener('input', e => {
   syncUnits();
 });
 $('sPos').addEventListener('input',   e => { S.pos = +e.target.value; syncUnits(); });
-$('sSpeed').addEventListener('input', e => { S.speed = +e.target.value; syncUnits(); });
-$('sWidth').addEventListener('input', e => { S.width = +e.target.value; syncUnits(); });
+$('sWidth').addEventListener('input', e => { S.width = Math.round(+e.target.value); syncUnits(); });
 
 $('btnFreeze').addEventListener('click', e => {
   S.frozen = !S.frozen;
@@ -855,7 +887,7 @@ requestAnimationFrame(tick);
 // exposed for debugging / automated checks: run n frames of synthetic time,
 // independent of rAF (which browsers throttle in background tabs)
 window.__slit = {
-  S, acc, hud, useDemo, clearAcc, applyMode,
+  S, acc, hud, useDemo, useFile, useCamera, clearAcc, applyMode, src,
   get phi(){ return phi; },
   burn(n, dt = 1/60){ for (let i = 0; i < n; i++) frame(dt); },
 };
