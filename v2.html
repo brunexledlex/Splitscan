@@ -579,6 +579,9 @@ function drawHud(){
   hx.setTransform(1,0,0,1,0,0);
   hx.clearRect(0,0,W,H);
   if (!S.guides || !src.el) return;
+  // Idle is for framing: no bezel, no blade, nothing over the picture.
+  // The instrument appears when a scan starts, or while you are aiming it.
+  if (state === 'idle' && glow < .02) return;
 
   const u = Math.max(1, Math.min(W,H)/420);
   const a = .16 + .84*glow;                 // ghosted → bloomed
