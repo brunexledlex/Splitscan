@@ -301,9 +301,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 <div id="bar">
   <button class="pill" id="btnRate">Rate <span id="rateVal">1</span></button>
   <div id="segMode" role="group" aria-label="Geometry">
-    <button data-mode="radial" aria-pressed="true">Radial</button>
-    <button data-mode="sweep">Swipe</button>
-    <button data-mode="strip">Split</button>
+    <button data-mode="swipe">Swipe</button>
+    <button data-mode="burst" aria-pressed="true">Burst</button>
+    <button data-mode="field">Field</button>
   </div>
   <button id="btnAA" aria-pressed="false" aria-label="Anti-aliasing"><span
     class="lg">Anti-aliasing</span><span class="sm">AA</span></button>
@@ -379,16 +379,6 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     </div>
   </div>
 
-  <div class="group" id="grpBlades">
-    <div class="label"><span>Blades</span></div>
-    <div class="seg" id="segBlades" role="group" aria-label="Blades">
-      <button data-blades="1" aria-pressed="true">1</button>
-      <button data-blades="2">2</button>
-      <button data-blades="3">3</button>
-      <button data-blades="4">4</button>
-    </div>
-  </div>
-
   <button class="chip" id="btnAdvanced" aria-expanded="false"
     style="width:100%;justify-content:center">Advanced</button>
 
@@ -419,7 +409,6 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 <div id="sheetExport" class="card" role="dialog" aria-modal="true" aria-label="Save image">
   <b class="card-title">Save image</b>
   <button class="cpill" id="optHD">Standard HD</button>
-  <button class="cpill" id="optStrip">Panorama</button>
   <button class="cpill danger" id="btnDiscard">Discard</button>
 </div>
 
@@ -453,22 +442,18 @@ const svg = n => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${IC
 const acc = $('acc'), hud = $('hud'), video = $('vid');
 const ax = acc.getContext('2d'), hx = hud.getContext('2d');
 const demoCv = document.createElement('canvas'), dx = demoCv.getContext('2d');
-// strip keeps its whole history in one wide buffer: no per-frame full-canvas
-// blit, and pixels that scroll out of view are no longer destroyed
-const CAP = 5000;
-let stripCv = null, sxc = null, stripX = 0;
 
 let W = 0, H = 0;                      // accumulation size (viewport aspect)
 let state = 'idle';                    // idle | scanning | export
 
 const S = {
-  mode:'radial', angle:0, pos:50, slice:1, blades:1, dir:'right',
+  mode:'burst', angle:0, slice:1, dir:'right', bandW:0.10,
   cx:.5, cy:.5, snap:'free', reverse:false, guides:true, manual:false,
 };
-const RATE = { sweep:200, radial:40, strip:20 };   // fixed, per geometry
+const RATE = { swipe:200, burst:240, field:200 };   // px/s, fixed per shape
 const src = { el:null, w:0, h:0, kind:null, mirror:false, stream:null, facing:'environment' };
 
-let phi = 0, sweepS = 0, sweepPrev = 0, stripAcc = 0;
+let sweepS = 0, sweepPrev = 0, ringR = 0, ringPrev = 0, fieldD = 0, fieldPrev = 0;
 let last = 0, glow = 0, glowTarget = 0;            // barrel ghosting
 
 /* ── snackbar ─────────────────────────────────────────────────────── */
@@ -514,38 +499,14 @@ function resize(){
   if (nw === W && nh === H) return;
   W = nw; H = nh;
   acc.width = hud.width = W; acc.height = hud.height = H;
-  stripCv = null;                                   // re-allocate lazily
   clearAcc();
-}
-/* Strip is 5000 on its long edge and 1080 on the short one — 5.4 MP.
-   Matching the viewport height instead would be 5000x1920 = 9.6 MP / 38 MB,
-   which crowds iOS Safari's canvas area ceiling for no visible gain. */
-const STRIP_H = 1080;
-function ensureStrip(){
-  const sh = Math.min(H, STRIP_H);
-  if (stripCv && stripCv.height === sh) return;
-  try{
-    const c = document.createElement('canvas');
-    c.width = CAP; c.height = sh;
-    const g = c.getContext('2d');
-    if (!g) throw new Error('no 2d context');
-    g.fillStyle = '#000'; g.fillRect(0,0,CAP,sh);
-    // a canvas over the limit allocates but reads back blank — probe it
-    g.fillStyle = '#fff'; g.fillRect(CAP-2,0,2,2);
-    if (g.getImageData(CAP-1,0,1,1).data[0] < 200) throw new Error('canvas too large');
-    stripCv = c; sxc = g; stripX = 0;
-    sxc.fillStyle = '#000'; sxc.fillRect(0,0,CAP,sh);
-  } catch(e){
-    stripCv = null;
-    snack('This device can’t allocate a 5000px strip.', 5000);
-  }
 }
 function clearAcc(){
   ax.setTransform(1,0,0,1,0,0);
   ax.fillStyle = '#000'; ax.fillRect(0,0,W,H);
   sweepS = sweepPrev = -sweepLength()/2;
-  stripAcc = 0; stripX = 0;
-  if (stripCv){ sxc.fillStyle='#000'; sxc.fillRect(0,0,CAP,H); }
+  ringR = ringPrev = 0;
+  fieldD = fieldPrev = 0;
 }
 
 function drawSource(ctx){
@@ -558,99 +519,98 @@ function drawSource(ctx){
   } else ctx.drawImage(src.el, ox, oy, dw, dh);
 }
 
-/* ── geometry ─────────────────────────────────────────────────────── */
+/* ── geometry: one time field, three shapes ───────────────────────────
+   Every slit here is the contour where the same scalar field equals "now".
+   Only the distance function changes:
+     Swipe  distance along a normal   -> a straight line
+     Burst  distance from the pivot   -> a ring
+     Field  distance from a band      -> two opposed lines           */
 const dir = () => S.reverse ? -1 : 1;
-
-function stepRadial(dt){
-  const a0 = phi;
-  if (S.manual) phi += wrapPi(S.angle*DEG - phi);
-  else          phi += dir() * RATE.radial * DEG * dt;
-  if (state !== 'scanning') return;
-  let lo = Math.min(a0,phi), hi = Math.max(a0,phi);
-  if (hi-lo > Math.PI){ hi = phi; lo = phi - S.slice*DEG; }
-  const minW = Math.max(S.slice,1)*DEG;
-  if (hi-lo < minW){ const m=(lo+hi)/2; lo=m-minW/2; hi=m+minW/2; }
-  const R = Math.hypot(W,H), px = S.cx*W, py = S.cy*H;
-  for (let k=0;k<S.blades;k++){
-    const off = k*TAU/S.blades;
-    ax.save(); ax.beginPath(); ax.moveTo(px,py);
-    ax.arc(px,py,R,lo+off,hi+off); ax.closePath(); ax.clip();
-    drawSource(ax); ax.restore();
-  }
-}
 
 function sweepLength(){
   const th = S.angle*DEG;
   return Math.abs(Math.sin(th))*W + Math.abs(Math.cos(th))*H;
 }
-function stepSweep(dt){
-  const th = S.angle*DEG;
-  const nx = -Math.sin(th), ny = Math.cos(th);
-  const dxv = Math.cos(th), dyv = Math.sin(th);
+function maxRadius(){
+  const px = S.cx*W, py = S.cy*H;
+  return Math.max(Math.hypot(px,py), Math.hypot(W-px,py),
+                  Math.hypot(px,H-py), Math.hypot(W-px,H-py));
+}
+const bandHalf = () => S.bandW * Math.min(W,H);
+const fieldMax = () => sweepLength()/2;
+
+/* clip the strip between two signed distances along the band normal */
+function paintBand(s0, s1){
+  const th = S.angle*DEG, nx = -Math.sin(th), ny = Math.cos(th);
+  const dxv = Math.cos(th), dyv = Math.sin(th), D = Math.hypot(W,H);
+  const cx = W/2, cy = H/2;
+  ax.save(); ax.beginPath();
+  ax.moveTo(cx+nx*s0-dxv*D, cy+ny*s0-dyv*D);
+  ax.lineTo(cx+nx*s0+dxv*D, cy+ny*s0+dyv*D);
+  ax.lineTo(cx+nx*s1+dxv*D, cy+ny*s1+dyv*D);
+  ax.lineTo(cx+nx*s1-dxv*D, cy+ny*s1-dyv*D);
+  ax.closePath(); ax.clip();
+  drawSource(ax); ax.restore();
+}
+
+function stepFor(dt){
+  if      (S.mode === 'burst') stepBurst(dt);
+  else if (S.mode === 'field') stepField(dt);
+  else                          stepSwipe(dt);
+}
+
+function stepSwipe(dt){
   const L = sweepLength();
   sweepPrev = sweepS;
-  if (S.manual){
-    sweepS = (S.pos/100 - .5)*L;
-    if (Math.abs(sweepS-sweepPrev) > L/2) sweepPrev = sweepS;
-  } else {
-    sweepS += dir() * RATE.sweep * dt;
-    if (sweepS >  L/2){ sweepS = -L/2; sweepPrev = -L/2; }
-    if (sweepS < -L/2){ sweepS =  L/2; sweepPrev =  L/2; }
-  }
+  sweepS += dir() * RATE.swipe * dt;
+  if (sweepS >  L/2){ sweepS = -L/2; sweepPrev = -L/2; }
+  if (sweepS < -L/2){ sweepS =  L/2; sweepPrev =  L/2; }
   if (state !== 'scanning') return;
   let lo = Math.min(sweepPrev,sweepS), hi = Math.max(sweepPrev,sweepS);
   const minW = Math.max(S.slice,1);
   if (hi-lo < minW){ const m=(lo+hi)/2; lo=m-minW/2; hi=m+minW/2; }
-  const D = Math.hypot(W,H), cx = W/2, cy = H/2;
-  ax.save(); ax.beginPath();
-  ax.moveTo(cx+nx*lo-dxv*D, cy+ny*lo-dyv*D);
-  ax.lineTo(cx+nx*lo+dxv*D, cy+ny*lo+dyv*D);
-  ax.lineTo(cx+nx*hi+dxv*D, cy+ny*hi+dyv*D);
-  ax.lineTo(cx+nx*hi-dxv*D, cy+ny*hi-dyv*D);
-  ax.closePath(); ax.clip(); drawSource(ax); ax.restore();
+  paintBand(lo, hi);
 }
 
-/* Strip writes into the wide history buffer, then the viewport shows a
-   window onto it. No full-canvas ping-pong, and history survives.     */
-function stepStrip(dt){
-  if (!S.manual) S.angle = (S.angle + dir()*RATE.strip*dt + 360) % 360;
+/* Burst: the ring's RADIUS is the time axis. Neighbouring radii are
+   neighbouring moments, so motion smears along rays — the sunburst. */
+function stepBurst(dt){
+  const R = maxRadius();
+  ringPrev = ringR;
+  ringR += dir() * RATE.burst * dt;
+  if (ringR > R){ ringR = 0; ringPrev = 0; }
+  if (ringR < 0){ ringR = R; ringPrev = R; }
   if (state !== 'scanning') return;
-  ensureStrip();
-  if (!stripCv) return;
-  stripAcc += Math.max(S.slice,1);
-  const adv = Math.floor(stripAcc);
-  if (adv < 1) return;
-  stripAcc -= adv;
-
-  if (stripX + adv >= CAP){ onCapReached(); return; }
-
-  const SH = stripCv.height, k = SH/H;   // strip is a scaled copy of the buffer
-  const th = S.angle*DEG;
-  sxc.save();
-  sxc.beginPath(); sxc.rect(stripX, 0, adv, SH); sxc.clip();
-  sxc.translate(stripX + adv/2, SH/2);
-  sxc.scale(k, k);
-  sxc.rotate(Math.PI/2 - th);
-  sxc.translate(-S.cx*W, -S.cy*H);
-  drawSource(sxc);
-  sxc.restore();
-  stripX += adv;
-}
-function presentStrip(){
-  if (!stripCv || !stripX) return;
-  const SH = stripCv.height, k = SH/H;
-  const winW = Math.min(stripX, W*k);            // visible window, in strip px
-  const from = Math.max(0, stripX - winW);
-  ax.setTransform(1,0,0,1,0,0);
-  ax.fillStyle = '#000'; ax.fillRect(0,0,W,H);
-  ax.drawImage(stripCv, from, 0, winW, SH, 0, 0, winW/k, H);
-}
-function onCapReached(){
-  snack('Strip reached 5000 px — scan stopped.', 4000);
-  setState('export');
+  let r0 = Math.min(ringPrev,ringR), r1 = Math.max(ringPrev,ringR);
+  const minW = Math.max(S.slice,1);
+  if (r1-r0 < minW){ const m=(r0+r1)/2; r0=m-minW/2; r1=m+minW/2; }
+  r0 = Math.max(r0, 0);
+  if (r1 <= 0) return;
+  const px = S.cx*W, py = S.cy*H;
+  ax.save(); ax.beginPath();
+  ax.arc(px,py,r1,0,TAU);
+  if (r0 > 0) ax.arc(px,py,r0,0,TAU,true);   // counter-wound: a ring, not a disc
+  ax.clip(); drawSource(ax); ax.restore();
 }
 
-/* ── HUD: the barrel. Ghosts when untouched, blooms under the thumb ── */
+/* Field: a live band in the middle, two slits running outward from it in
+   opposite directions. Inside the band time is untouched. */
+function stepField(dt){
+  const w = bandHalf(), M = fieldMax();
+  fieldPrev = fieldD;
+  fieldD += dir() * RATE.field * dt;
+  if (fieldD > M){ fieldD = 0; fieldPrev = 0; }
+  if (fieldD < 0){ fieldD = M; fieldPrev = M; }
+  if (state !== 'scanning') return;
+  let d0 = Math.min(fieldPrev,fieldD), d1 = Math.max(fieldPrev,fieldD);
+  const minW = Math.max(S.slice,1);
+  if (d1-d0 < minW){ const m=(d0+d1)/2; d0=m-minW/2; d1=m+minW/2; }
+  d0 = Math.max(d0, 0);
+  paintBand( w+d0,  w+d1);      // the two slits, mirrored
+  paintBand(-(w+d1), -(w+d0));
+  paintBand(-w, w);             // the field itself stays live
+}
+
 const MINT = '206,253,211';
 
 /* The lime line IS the slit — it marks where the scan is reading right now,
@@ -663,27 +623,37 @@ function drawSlit(){
   hx.lineWidth = px4;
   hx.strokeStyle = `rgb(${MINT})`;
 
-  if (S.mode === 'radial'){
+  if (S.mode === 'burst'){
     const px = S.cx*W, py = S.cy*H;
-    for (let k=0;k<S.blades;k++){
-      const ang = phi + k*TAU/S.blades;
-      hx.globalAlpha = k ? .45 : 1;
-      hx.beginPath(); hx.moveTo(px,py);
-      hx.lineTo(px+Math.cos(ang)*D, py+Math.sin(ang)*D); hx.stroke();
-    }
-    hx.globalAlpha = 1;
-  } else if (S.mode === 'sweep'){
+    if (ringR > px4/2){ hx.beginPath(); hx.arc(px,py,ringR,0,TAU); hx.stroke(); }
+
+  } else if (S.mode === 'field'){
+    const th = S.angle*DEG, nx=-Math.sin(th), ny=Math.cos(th);
+    const dxv=Math.cos(th), dyv=Math.sin(th), cx=W/2, cy=H/2;
+    const line = s => {
+      hx.beginPath();
+      hx.moveTo(cx+nx*s-dxv*D, cy+ny*s-dyv*D);
+      hx.lineTo(cx+nx*s+dxv*D, cy+ny*s+dyv*D); hx.stroke();
+    };
+    const w = bandHalf();
+    line( w + fieldD); line(-(w + fieldD));      // the two opposed slits
+    hx.globalAlpha = .5; hx.lineWidth = px4/2;   // the band edges
+    line(w); line(-w);
+    hx.globalAlpha = 1; hx.lineWidth = px4;
+
+  } else {
     const th = S.angle*DEG, nx=-Math.sin(th), ny=Math.cos(th);
     const dxv=Math.cos(th), dyv=Math.sin(th);
     const bx = W/2 + nx*sweepS, by = H/2 + ny*sweepS;
     hx.beginPath();
     hx.moveTo(bx-dxv*D, by-dyv*D); hx.lineTo(bx+dxv*D, by+dyv*D); hx.stroke();
-  } else {
-    const th = S.angle*DEG, px = S.cx*W, py = S.cy*H;
-    hx.beginPath();
-    hx.moveTo(px-Math.cos(th)*D, py-Math.sin(th)*D);
-    hx.lineTo(px+Math.cos(th)*D, py+Math.sin(th)*D); hx.stroke();
   }
+}
+
+/* the two Field handles, in canvas space */
+function handlePts(){
+  const th = S.angle*DEG, nx=-Math.sin(th), ny=Math.cos(th), w = bandHalf();
+  return [{x:W/2+nx*w, y:H/2+ny*w}, {x:W/2-nx*w, y:H/2-ny*w}];
 }
 
 function drawHud(){
@@ -710,24 +680,27 @@ function drawHud(){
     hx.setLineDash([]);
   }
 
-  if (S.mode === 'radial'){
-    const px = S.cx*W, py = S.cy*H, R = Math.min(W,H)*.34;
-    hx.strokeStyle = `rgba(${MINT},${.26*a})`;
-    hx.beginPath(); hx.arc(px,py,R,0,TAU); hx.stroke();
-    for (let d=0; d<360; d+=15){
-      const long = d%45===0, r = long ? R-13*u : R-6*u;
-      const c = Math.cos(d*DEG), s = Math.sin(d*DEG);
-      hx.strokeStyle = `rgba(${MINT},${(long?.55:.22)*a})`;
-      hx.beginPath(); hx.moveTo(px+c*R,py+s*R); hx.lineTo(px+c*r,py+s*r); hx.stroke();
+  if (S.mode === 'burst'){                     // radius ruler
+    const px = S.cx*W, py = S.cy*H, R = maxRadius();
+    hx.strokeStyle = `rgba(${MINT},${.22*a})`;
+    for (let i=1;i<=4;i++){
+      hx.beginPath(); hx.arc(px,py,R*i/4,0,TAU); hx.stroke();
     }
     hx.strokeStyle = `rgba(${MINT},${.8*Math.max(a,.5)})`;
-    hx.lineWidth = 1.5*u;
     hx.beginPath(); hx.arc(px,py,7*u,0,TAU); hx.stroke();
 
-  } else if (S.mode === 'sweep'){
+  } else if (S.mode === 'field'){              // grabbable band handles
+    for (const h of handlePts()){
+      hx.fillStyle = `rgba(${MINT},${Math.max(a,.6)})`;
+      hx.beginPath(); hx.arc(h.x,h.y,9*u,0,TAU); hx.fill();
+      hx.fillStyle = 'rgba(0,0,0,.85)';
+      hx.beginPath(); hx.arc(h.x,h.y,3.5*u,0,TAU); hx.fill();
+    }
+
+  } else {                                     // the travel track
     const th = S.angle*DEG, nx=-Math.sin(th), ny=Math.cos(th);
     const cx=W/2, cy=H/2, L=sweepLength();
-    hx.strokeStyle = `rgba(${MINT},${.18*a})`;      // the travel track
+    hx.strokeStyle = `rgba(${MINT},${.18*a})`;
     hx.beginPath(); hx.moveTo(cx-nx*L/2,cy-ny*L/2); hx.lineTo(cx+nx*L/2,cy+ny*L/2); hx.stroke();
   }
 }
@@ -772,6 +745,7 @@ uniform vec2  uPivot;
 uniform float uBlur;
 uniform float uSpan;
 uniform float uAspect;
+uniform float uBandW;
 
 /* one sample at a fractional age, interpolated between two frames */
 vec4 tapAge(vec2 uv, float age){
@@ -788,11 +762,14 @@ void main(){
   vec2 p = uv - uPivot;
   p.x *= uAspect;
 
+  /* one field, three distance functions */
   float t;
-  if (uMode == 1){
-    float ang = atan(p.y, p.x) - uAngle;
-    t = fract(ang / 6.28318530718 + 1.0);
-  } else {
+  if (uMode == 1){                       // Burst: distance from the pivot
+    t = clamp(length(p) * uSpan, 0.0, 1.0);
+  } else if (uMode == 2){                // Field: distance from the band
+    vec2 n = vec2(-sin(uAngle), cos(uAngle));
+    t = clamp((abs(dot(p, n)) - uBandW) * uSpan, 0.0, 1.0);
+  } else {                               // Swipe: distance along the normal
     vec2 n = vec2(-sin(uAngle), cos(uAngle));
     t = clamp(dot(p, n) * uSpan + 0.5, 0.0, 1.0);
   }
@@ -846,7 +823,7 @@ function aaInit(){
       throw new Error(gl.getProgramInfoLog(p) || 'link failed');
     AA.prog = p;
     for (const n of ['uHist','uRes','uDepth','uHead','uUsable','uMode',
-                     'uAngle','uPivot','uBlur','uSpan','uAspect'])
+                     'uAngle','uPivot','uBlur','uSpan','uAspect','uBandW'])
       AA.u[n] = gl.getUniformLocation(p, n);
     AA.vao = gl.createVertexArray();
   } catch(e){
@@ -941,26 +918,40 @@ function aaRender(outW, outH){
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_3D, AA.tex);
 
-  const th = (S.mode === 'radial' ? phi : S.angle*DEG);
+  const th = S.angle*DEG;
   const aspect = outW / outH;
   const nx = -Math.sin(th), ny = Math.cos(th);
   const half = .5*Math.abs(nx)*aspect + .5*Math.abs(ny);
+  const modeId = S.mode === 'burst' ? 1 : S.mode === 'field' ? 2 : 0;
+  let span, bandW = 0;
+  if (modeId === 1){
+    let m = 0;
+    for (const c of [[0,0],[1,0],[0,1],[1,1]])
+      m = Math.max(m, Math.hypot((c[0]-S.cx)*aspect, c[1]-(1-S.cy)));
+    span = 1/Math.max(m, 1e-4);
+  } else if (modeId === 2){
+    bandW = bandHalf()/H;
+    span = 1/Math.max(half - bandW, 1e-4);
+  } else {
+    span = 1/(2*Math.max(half, 1e-4));
+  }
 
   gl.uniform1i(AA.u.uHist, 0);
   gl.uniform2f(AA.u.uRes, outW, outH);
   gl.uniform1f(AA.u.uDepth, AA.layers);
   gl.uniform1f(AA.u.uHead, AA.head);
   gl.uniform1f(AA.u.uUsable, AA.filled);
-  gl.uniform1i(AA.u.uMode, S.mode === 'radial' ? 1 : 0);
+  gl.uniform1i(AA.u.uMode, modeId);
   gl.uniform1f(AA.u.uAngle, th);
   gl.uniform2f(AA.u.uPivot, S.cx, 1 - S.cy);      // GL origin is bottom-left
   gl.uniform1f(AA.u.uBlur, AA.blur);
-  gl.uniform1f(AA.u.uSpan, 1/(2*Math.max(half, 1e-4)));
+  gl.uniform1f(AA.u.uSpan, span);
+  gl.uniform1f(AA.u.uBandW, bandW);
   gl.uniform1f(AA.u.uAspect, aspect);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
-const aaEligible = () => AA.on && S.mode !== 'strip' && !AA.lost && AA.gl && AA.tex;
+const aaEligible = () => AA.on && !AA.lost && AA.gl && AA.tex;
 
 function aaSetOn(on){
   AA.on = on;
@@ -1020,7 +1011,7 @@ function frame(dt){
     // live time-displacement: the whole image re-renders every tick.
     // Export freezes the buffer, which is what Hold means here.
     if (state !== 'export') aaPush();
-    if (S.mode === 'radial') stepRadial(dt); else stepSweep(dt);
+    stepFor(dt);
     const k = Math.min(devicePixelRatio || 1, 2) * 0.75;   // soft by design
     aaRender(Math.max(2, Math.round(innerWidth*k)), Math.max(2, Math.round(innerHeight*k)));
     drawHud(); syncReadout();
@@ -1030,13 +1021,9 @@ function frame(dt){
   if (state === 'idle'){
     ax.setTransform(1,0,0,1,0,0);
     drawSource(ax);                       // live preview, nothing accumulating
-    if (S.mode === 'radial') stepRadial(dt);
-    else if (S.mode === 'sweep') stepSweep(dt);
-    else stepStrip(dt);
+    stepFor(dt);
   } else {
-    if (S.mode === 'radial') stepRadial(dt);
-    else if (S.mode === 'sweep') stepSweep(dt);
-    else { stepStrip(dt); if (state === 'scanning') presentStrip(); }
+    stepFor(dt);
   }
   drawHud();
   syncReadout();
@@ -1051,7 +1038,7 @@ function tick(now){
 function syncReadout(){
   // no on-screen readout any more — the angle lives in the settings sheet
   if (S.manual) return;
-  const aDeg = S.mode === 'radial' ? ((phi/DEG%360)+360)%360 : S.angle;
+  const aDeg = S.angle;
   $('oAngle').textContent = aDeg.toFixed(0) + '°';
 }
 
@@ -1073,51 +1060,33 @@ function setState(next){
   } else {
     sh.classList.remove('recording');
     sh.setAttribute('aria-label','New scan');
-    if (S.mode === 'strip') presentStrip();
     openExport();
   }
 }
 
 /* ── export ───────────────────────────────────────────────────────── */
-function exportCanvas(kind){
-  if (aaEligible()){
-    const c = document.createElement('canvas');
-    c.width = 1920; c.height = 1080;
-    aaRender(1920, 1080);                     // re-render at export size
-    c.getContext('2d').drawImage($('gl'), 0, 0, 1920, 1080);
-    return c;
-  }
-  if (kind === 'strip' && S.mode === 'strip' && stripCv && stripX > 0){
-    const c = document.createElement('canvas');
-    c.width = Math.min(stripX, CAP); c.height = stripCv.height;
-    c.getContext('2d').drawImage(stripCv, 0,0, c.width,c.height, 0,0, c.width,c.height);
-    return c;
-  }
-  // HD: centre-crop the buffer to 16:9, then scale to 1920x1080
+function exportCanvas(){
   const c = document.createElement('canvas');
   c.width = 1920; c.height = 1080;
   const g = c.getContext('2d');
   g.fillStyle = '#000'; g.fillRect(0,0,1920,1080);
-  const useStrip = S.mode === 'strip' && stripCv && stripX > 0;
-  const source = useStrip ? stripCv : acc;
-  const sw0 = useStrip ? Math.min(stripX,CAP) : W;
-  const sh0 = useStrip ? stripCv.height : H;
-  const s = Math.max(1920/sw0, 1080/sh0);
-  const dw = sw0*s, dh = sh0*s;
-  g.drawImage(source, 0,0, sw0,sh0, (1920-dw)/2, (1080-dh)/2, dw, dh);
+  if (aaEligible()){
+    aaRender(1920, 1080);                       // re-render at export size
+    g.drawImage($('gl'), 0, 0, 1920, 1080);
+    return c;
+  }
+  const s = Math.max(1920/W, 1080/H);           // centre-crop to 16:9
+  const dw = W*s, dh = H*s;
+  g.drawImage(acc, 0,0, W,H, (1920-dw)/2, (1080-dh)/2, dw, dh);
   return c;
 }
-function openExport(){
-  // Panorama only exists in Split, which is the only unbounded geometry
-  $('optStrip').hidden = !(S.mode === 'strip' && stripX > 0);
-  openSheet('sheetExport');
-}
-$('optHD').addEventListener('click', () => doSave('hd'));
-$('optStrip').addEventListener('click', () => doSave('strip'));
+
+function openExport(){ openSheet('sheetExport'); }
+$('optHD').addEventListener('click', doSave);
 $('btnDiscard').addEventListener('click', () => { closeSheets(); setState('idle'); });
 
-function doSave(exportKind){
-  const c = exportCanvas(exportKind);
+function doSave(){
+  const c = exportCanvas();
   c.toBlob(async blob => {
     if (!blob) return snack('Nothing to save.');
     const file = new File([blob], `slitscan-${c.width}x${c.height}.png`, {type:'image/png'});
@@ -1169,10 +1138,6 @@ $('segMode').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   S.mode = b.dataset.mode; applyMode();
 });
-$('segBlades').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
-  S.blades = +b.dataset.blades; press($('segBlades'),'blades',S.blades); clearAcc();
-});
 $('segSlice').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   setSlice(+b.dataset.slice);
@@ -1182,7 +1147,7 @@ function setSlice(v){
   S.slice = clamp(Math.round(v), 1, 60);
   press($('segSlice'),'slice',S.slice);
   $('sSlice').value = S.slice;
-  $('oSlice').textContent = S.mode === 'radial' ? S.slice+'°' : S.slice+' px';
+  $('oSlice').textContent = S.slice + ' px';
   $('oSliceFine').textContent = S.slice;
   $('rateVal').textContent = S.slice;          // the bar pill
 }
@@ -1192,7 +1157,7 @@ $('chipsSnap').addEventListener('click', e => {
   [...$('chipsSnap').querySelectorAll('[data-snap]')]
     .forEach(c => c.setAttribute('aria-pressed', String(c.dataset.snap === S.snap)));
   if (S.snap !== 'free'){
-    S.angle = +S.snap; S.manual = true; phi = S.angle*DEG;
+    S.angle = +S.snap; S.manual = true;
     $('oAngle').textContent = S.angle+'°';
   } else S.manual = false;
 });
@@ -1209,15 +1174,12 @@ $('btnRecentre').addEventListener('click', () => { S.cx = S.cy = .5; snack('Pivo
 
 function applyMode(){
   press($('segMode'),'mode',S.mode);
-  press($('segBlades'),'blades',S.blades);
-  $('grpBlades').hidden = S.mode !== 'radial';
   // Strip accumulates without bound, so it has no fixed time depth to sample
-  if (S.mode === 'strip' && AA.on) aaSetOn(false);
   if (typeof aaEligible === 'function'){
     $('gl').hidden = !aaEligible(); $('acc').hidden = !!aaEligible();
   }
-  $('lSlice').textContent = S.mode==='sweep' ? 'Slit' : S.mode==='radial' ? 'Blade' : 'Rate';
-  $('sSlice').max = S.mode==='sweep' ? 60 : S.mode==='radial' ? 20 : 12;
+  $('lSlice').textContent = S.mode==='burst' ? 'Ring' : S.mode==='field' ? 'Edge' : 'Slit';
+  $('sSlice').max = 60;
   setSlice(clamp(S.slice, 1, +$('sSlice').max));
   clearAcc();
 }
@@ -1230,59 +1192,96 @@ function toCanvas(ev){
   const r = acc.getBoundingClientRect();
   return { x:(ev.clientX-r.left)/r.width*W, y:(ev.clientY-r.top)/r.height*H };
 }
-/* Swipe picks which side the slit comes from — you no longer aim it by hand.
-   Swipe:  you drag the way the slit TRAVELS, so it enters from behind you
-           (drag up -> slit rises from below).
-   Radial / Split: you drag toward where the blade should POINT
-           (drag left -> slit on the left).                              */
+/* Swipe picks the slit, per shape. Aiming by hand is gone.
+     Swipe  drag the way the slit TRAVELS -> it enters from behind you
+     Burst  up expands from the centre, down contracts toward it
+     Field  up/down widens the calm band, left/right rotates it 90 deg   */
 const SWIPE_OPPOSITE = { up:'bottom', down:'top', left:'right', right:'left' };
-const SWIPE_SAME     = { up:'top', down:'bottom', left:'left', right:'right' };
-// sweep: slit orientation whose travel starts at that edge
-const EDGE_SWEEP = { top:0,   right:90,  bottom:180, left:270 };
-// radial/strip: the direction the blade points
-const EDGE_POINT = { right:0, bottom:90, left:180,   top:270  };
+const EDGE_SWEEP = { top:0, right:90, bottom:180, left:270 };
+const EDGE_POINT = { right:0, bottom:90, left:180, top:270 };
+const BAND_MIN = .045, BAND_MAX = .45;
 
 function setDir(dir, announce){
   S.dir = dir;
-  if (S.mode === 'sweep'){
+  if (S.mode === 'swipe'){
     S.angle = EDGE_SWEEP[dir];
     sweepS = sweepPrev = -sweepLength()/2;      // restart from that edge
   } else {
     S.angle = EDGE_POINT[dir];
-    phi = S.angle * DEG;
   }
-  S.manual = false;                             // the machine drives from here
-  $('oAngle').textContent = S.angle.toFixed(0) + '°';
+  S.manual = false;
+  $('oAngle').textContent = S.angle.toFixed(0) + '\u00B0';
   clearAcc();
   if (announce) snack('Slit from ' + dir, 1300);
 }
 
-let dragStart = null;
-const SWIPE_MIN = 28;                           // px before it counts
+function applySwipe(drag){
+  if (S.mode === 'swipe') return setDir(SWIPE_OPPOSITE[drag], true);
 
-/* The swipe owns the whole canvas. Grabbing the pivot here would swallow it:
-   the pivot sits at screen centre by default, which is exactly where a thumb
-   starts a swipe. Pivot is repositioned from Advanced instead. */
+  if (S.mode === 'burst'){
+    S.reverse = (drag === 'down');
+    ringR = ringPrev = S.reverse ? maxRadius() : 0;
+    clearAcc();
+    return snack(S.reverse ? 'Burst inward' : 'Burst outward', 1300);
+  }
+
+  if (drag === 'up' || drag === 'down'){
+    S.bandW = clamp(S.bandW + (drag === 'up' ? .045 : -.045), BAND_MIN, BAND_MAX);
+    clearAcc();
+    return snack('Field ' + Math.round(S.bandW*200) + '% wide', 1300);
+  }
+  S.angle = (S.angle + 90) % 360;
+  clearAcc();
+  snack('Field at ' + S.angle + '\u00B0', 1300);
+}
+
+/* Field's band is set by two handles: across changes width, around rotates.
+   A minimum width keeps them from ever stacking on the centre, which is
+   where every swipe begins — the bug that killed the old pivot grab. */
+function nearHandle(p){
+  const u = Math.max(1, Math.min(W,H)/420), hs = handlePts();
+  for (let i=0;i<2;i++) if (Math.hypot(p.x-hs[i].x, p.y-hs[i].y) < 24*u) return i;
+  return -1;
+}
+function moveHandle(ev, which){
+  const p = toCanvas(ev);
+  let vx = p.x - W/2, vy = p.y - H/2;
+  if (which === 1){ vx = -vx; vy = -vy; }
+  const len = Math.hypot(vx, vy);
+  if (len < 6) return;
+  S.angle = ((Math.atan2(vy,vx)/DEG - 90) % 360 + 360) % 360;
+  S.bandW = clamp(len / Math.min(W,H), BAND_MIN, BAND_MAX);
+  $('oAngle').textContent = S.angle.toFixed(0) + '\u00B0';
+}
+
+let dragStart = null, grabbed = -1;
+const SWIPE_MIN = 28;
+
 vp.addEventListener('pointerdown', ev => {
   if (!src.el || !W) return;
   vp.setPointerCapture(ev.pointerId);
+  glowTarget = 1;
+  if (S.mode === 'field'){
+    grabbed = nearHandle(toCanvas(ev));
+    if (grabbed >= 0){ dragging = 'handle'; moveHandle(ev, grabbed); return; }
+  }
   dragging = 'swipe';
   dragStart = { x: ev.clientX, y: ev.clientY };
-  glowTarget = 1;
+});
+vp.addEventListener('pointermove', ev => {
+  if (dragging === 'handle') moveHandle(ev, grabbed);
 });
 ['pointerup','pointercancel'].forEach(t => vp.addEventListener(t, ev => {
-  if (dragging === 'swipe' && dragStart){
+  if (dragging === 'handle') clearAcc();
+  else if (dragging === 'swipe' && dragStart){
     const dx = ev.clientX - dragStart.x, dy = ev.clientY - dragStart.y;
-    if (Math.hypot(dx, dy) >= SWIPE_MIN){
-      const drag = Math.abs(dx) > Math.abs(dy)
+    if (Math.hypot(dx, dy) >= SWIPE_MIN)
+      applySwipe(Math.abs(dx) > Math.abs(dy)
         ? (dx > 0 ? 'right' : 'left')
-        : (dy > 0 ? 'down'  : 'up');
-      setDir((S.mode === 'sweep' ? SWIPE_OPPOSITE : SWIPE_SAME)[drag], true);
-    }
+        : (dy > 0 ? 'down'  : 'up'));
   }
-  dragging = null; dragStart = null; glowTarget = 0;
+  dragging = null; dragStart = null; grabbed = -1; glowTarget = 0;
 }));
-
 
 /* ── sources ──────────────────────────────────────────────────────── */
 function stopStream(){ if (src.stream){ src.stream.getTracks().forEach(t=>t.stop()); src.stream=null; } }
@@ -1343,9 +1342,6 @@ $('btnRate').addEventListener('click', () => {
 /* Anti-aliasing toggles from the bar; the sheet keeps its own control
    as the accessible twin, and both stay in sync through aaSetOn */
 $('btnAA').addEventListener('click', () => {
-  if (!AA.on && S.mode === 'strip'){
-    snack('Split has no fixed time depth — use Radial or Swipe.', 4000); return;
-  }
   aaSetOn(!AA.on);
 });
 $('segSource').addEventListener('click', e => {
@@ -1405,7 +1401,7 @@ requestAnimationFrame(tick);
 window.__slit2 = {
   S, acc, hud, src, get state(){return state}, setState, resize, clearAcc,
   useDemo, useCamera, applyMode, exportCanvas,
-  get stripX(){return stripX}, get W(){return W}, get H(){return H},
+  get W(){return W}, get H(){return H},
   burn(n, dt=1/60){ for(let i=0;i<n;i++) frame(dt); },
 };
 })();
