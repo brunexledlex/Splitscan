@@ -5,10 +5,11 @@
      · the page itself  → network-first, cache fallback  (updates land,
                           and it still opens with no network at all)
      · icons / manifest → cache-first                    (they don't change) */
-const CACHE = 'slitscan-v2';
+const CACHE = 'slitscan-v3';
 const ASSETS = [
   './',
   './index.html',
+  './v2.html',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
@@ -43,11 +44,14 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(req)
         .then(res => {
+          // cache under the page's OWN url — keying every navigation to
+          // index.html made visiting v2.html overwrite the offline v1
           const copy = res.clone();
-          caches.open(CACHE).then(c => c.put('./index.html', copy));
+          caches.open(CACHE).then(c => c.put(req.url, copy));
           return res;
         })
-        .catch(() => caches.match('./index.html', {ignoreSearch: true}))
+        .catch(() => caches.match(req, {ignoreSearch: true})
+          .then(hit => hit || caches.match('./index.html', {ignoreSearch: true})))
     );
     return;
   }

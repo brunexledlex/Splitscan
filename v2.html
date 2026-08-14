@@ -87,13 +87,15 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .icon-btn:disabled{opacity:.38}
 
 /* ── dock: the residue. Three targets, no bar ─────────────────────── */
+/* grid, not flex: the shutter stays screen-centred whatever flanks it */
 #dock{
   position:fixed;left:0;right:0;bottom:0;z-index:3;
   padding:0 24px calc(var(--safe-b) + 18px);
-  display:flex;align-items:center;justify-content:center;gap:34px;
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
   background:linear-gradient(rgba(20,16,12,0), rgba(20,16,12,.62));
   pointer-events:none;
 }
+#dock > #btnSource{justify-self:end;margin-right:34px}
 #dock > *{pointer-events:auto}
 
 #shutter{
@@ -156,20 +158,22 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .chip[aria-pressed="true"]{background:var(--p-container);color:var(--on-p-container);border-color:transparent}
 .chip svg{width:18px;height:18px;fill:currentColor}
 
-/* M3 list rows for the export sheet */
-.row{
-  display:flex;align-items:center;gap:14px;min-height:64px;padding:10px 4px;
-  border-radius:12px;width:100%;text-align:left;
+/* export options: full targets, not list rows — tapping one exports it */
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+.opt{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;min-height:132px;padding:16px 10px;border-radius:20px;
+  background:var(--s-container-hi);border:1px solid transparent;
+  transition:background .15s var(--ease),transform .12s var(--ease);
 }
-.row:active{background:var(--s-container-hi)}
-.row .ico{width:40px;height:40px;flex:0 0 40px;border-radius:50%;
-  background:var(--s-container-highest);display:grid;place-items:center}
-.row .ico svg{width:22px;height:22px;fill:var(--primary)}
-.row .txt{flex:1;min-width:0}
-.row .txt b{display:block;font-size:15px;font-weight:500}
-.row .txt span{display:block;font-size:12px;color:var(--on-surface-var);
+.opt:active{transform:scale(.97);background:var(--s-container-highest)}
+.opt .ico{width:44px;height:44px;border-radius:50%;
+  background:var(--p-container);display:grid;place-items:center}
+.opt .ico svg{width:24px;height:24px;fill:var(--on-p-container)}
+.opt b{font-size:15px;font-weight:500;text-align:center;line-height:1.2}
+.opt > span:last-child{font-size:12px;color:var(--on-surface-var);
   font-family:var(--mono);font-variant-numeric:tabular-nums}
-.row:disabled{opacity:.38}
+.opt[hidden] ~ .opt, .opts:has(.opt[hidden]){grid-template-columns:1fr}
 
 .actions{display:flex;gap:10px;margin:16px 0 4px}
 .btn{
@@ -219,16 +223,15 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 </div>
 
 <div id="topbar">
-  <div id="readout">RADIAL · <b id="rAngle">000°</b></div>
   <div class="spacer"></div>
   <button class="icon-btn" id="btnFlip" aria-label="Switch camera"></button>
   <button class="icon-btn" id="btnTune" aria-label="Settings"></button>
 </div>
 
 <div id="dock">
-  <button class="icon-btn" id="btnSource" aria-label="Choose source"></button>
+  <button class="icon-btn" id="btnSource" aria-label="Use camera"></button>
   <button id="shutter" aria-label="Start scan"></button>
-  <button class="icon-btn" id="btnExport" aria-label="Export" disabled></button>
+  <span aria-hidden="true"></span>
 </div>
 
 <div id="scrim"></div>
@@ -238,6 +241,15 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <div class="grabber"></div>
   <h2>Scan</h2>
   <p class="hint">Drag anywhere on the image to aim the slit by hand.</p>
+
+  <div class="group">
+    <div class="label"><span>Source</span></div>
+    <div class="seg" id="segSource" role="group" aria-label="Source">
+      <button data-source="environment">Rear</button>
+      <button data-source="user">Front</button>
+      <button data-source="demo" aria-pressed="true">Demo</button>
+    </div>
+  </div>
 
   <div class="group">
     <div class="label"><span>Geometry</span></div>
@@ -313,18 +325,22 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <h2>Export</h2>
   <p class="hint" id="exportHint">Nothing scanned yet.</p>
 
-  <button class="row" id="optHD">
-    <span class="ico" id="icoHD"></span>
-    <span class="txt"><b>HD still</b><span>1920 × 1080</span></span>
-  </button>
-  <button class="row" id="optStrip">
-    <span class="ico" id="icoStrip"></span>
-    <span class="txt"><b>Continuous strip</b><span id="stripLen">0 / 5000 px</span></span>
-  </button>
+  <!-- the options ARE the action: tapping one exports it -->
+  <div class="opts">
+    <button class="opt" id="optHD">
+      <span class="ico" id="icoHD"></span>
+      <b>HD still</b>
+      <span>1920 × 1080</span>
+    </button>
+    <button class="opt" id="optStrip">
+      <span class="ico" id="icoStrip"></span>
+      <b>Continuous strip</b>
+      <span id="stripLen">0 / 5000 px</span>
+    </button>
+  </div>
 
   <div class="actions">
     <button class="btn" id="btnDiscard">Discard</button>
-    <button class="btn filled" id="btnSave">Save</button>
   </div>
 </div>
 
@@ -354,7 +370,6 @@ const svg = n => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${IC
 $('btnFlip').innerHTML   = svg('cameraswitch');
 $('btnTune').innerHTML   = svg('tune');
 $('btnSource').innerHTML = svg('photo_camera');
-$('btnExport').innerHTML = svg('download');
 $('icoHD').innerHTML     = svg('aspect_ratio');
 $('icoStrip').innerHTML  = svg('crop_free');
 
@@ -649,10 +664,11 @@ function tick(now){
 }
 
 function syncReadout(){
+  // no on-screen readout any more — the angle lives in the settings sheet
+  if (S.manual) return;
   const aDeg = S.mode === 'radial' ? ((phi/DEG%360)+360)%360 : S.angle;
-  $('rAngle').textContent = aDeg.toFixed(0).padStart(3,'0') + '°';
-  $('readout').firstChild.nodeValue = S.mode.toUpperCase() + ' · ';
-  if (!S.manual) { $('sAngle').value = aDeg; $('oAngle').textContent = aDeg.toFixed(0)+'°'; }
+  $('sAngle').value = aDeg;
+  $('oAngle').textContent = aDeg.toFixed(0) + '°';
 }
 
 /* ── state machine ────────────────────────────────────────────────── */
@@ -663,17 +679,14 @@ function setState(next){
   if (next === 'idle'){
     sh.innerHTML = svg('record'); sh.classList.remove('recording');
     sh.setAttribute('aria-label','Start scan');
-    $('btnExport').disabled = true;
     clearAcc();
   } else if (next === 'scanning'){
     sh.innerHTML = svg('stop'); sh.classList.add('recording');
     sh.setAttribute('aria-label','Stop scan');
-    $('btnExport').disabled = true;
     clearAcc();
   } else {
     sh.innerHTML = svg('record'); sh.classList.remove('recording');
     sh.setAttribute('aria-label','New scan');
-    $('btnExport').disabled = false;
     if (S.mode === 'strip') presentStrip();
     openExport();
   }
@@ -701,23 +714,20 @@ function exportCanvas(kind){
   g.drawImage(source, 0,0, sw0,sh0, (1920-dw)/2, (1080-dh)/2, dw, dh);
   return c;
 }
-let exportKind = 'hd';
 function openExport(){
   const strippable = S.mode === 'strip' && stripX > 0;
   $('optStrip').hidden = !strippable;
   $('stripLen').textContent = `${stripX} / ${CAP} px`;
   $('exportHint').textContent = strippable
-    ? `Strip is ${stripX} px long.`
-    : `Scan is ${W} × ${H}.`;
-  exportKind = 'hd';
+    ? `Strip is ${stripX} px long. Pick a format to save.`
+    : `Scan is ${W} × ${H}. Pick a format to save.`;
   openSheet('sheetExport');
 }
-$('optHD').addEventListener('click', () => { exportKind='hd'; doSave(); });
-$('optStrip').addEventListener('click', () => { exportKind='strip'; doSave(); });
-$('btnSave').addEventListener('click', doSave);
+$('optHD').addEventListener('click', () => doSave('hd'));
+$('optStrip').addEventListener('click', () => doSave('strip'));
 $('btnDiscard').addEventListener('click', () => { closeSheets(); setState('idle'); });
 
-function doSave(){
+function doSave(exportKind){
   const c = exportCanvas(exportKind);
   c.toBlob(async blob => {
     if (!blob) return snack('Nothing to save.');
@@ -748,7 +758,6 @@ function closeSheets(){
 $('scrim').addEventListener('click', closeSheets);
 $('btnTune').addEventListener('click', () => openSheet('sheetTune'));
 $('tuneDone').addEventListener('click', closeSheets);
-$('btnExport').addEventListener('click', openExport);
 $('btnAdvanced').addEventListener('click', e => {
   const open = $('advanced').hidden;
   $('advanced').hidden = !open;
@@ -908,31 +917,20 @@ async function useCamera(facing){
 }
 $('btnFlip').addEventListener('click', () =>
   useCamera(src.facing === 'user' ? 'environment' : 'user'));
+
+/* No chooser menu: the dock button goes straight to the camera. Flip is
+   top-right, and Demo lives in the settings sheet. getUserMedia is called
+   synchronously from the click, which is what iOS requires. */
 $('btnSource').addEventListener('click', () => {
-  const cam = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-  const note = cam ? '' : ' · needs https';
-  chooseSource([
-    ['Rear camera'+note,  () => useCamera('environment')],
-    ['Front camera'+note, () => useCamera('user')],
-    ['Demo source',       () => useDemo()],
-  ]);
+  if (src.kind === 'camera') { useDemo(); snack('Demo source', 1400); return; }
+  useCamera(src.facing || 'environment');
 });
-function chooseSource(opts){
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'position:fixed;inset:0;z-index:9;background:rgba(0,0,0,.6);display:flex;flex-direction:column;justify-content:flex-end;gap:8px;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom))';
-  for (const [label, run] of opts){
-    const b = document.createElement('button');
-    b.className='btn filled'; b.textContent=label;
-    b.style.cssText='min-height:56px';
-    b.onclick = () => { wrap.remove(); run(); };    // sync: keeps the gesture
-    wrap.appendChild(b);
-  }
-  const c = document.createElement('button');
-  c.className='btn'; c.textContent='Cancel'; c.style.cssText='min-height:56px;background:var(--s-container)';
-  c.onclick = () => wrap.remove();
-  wrap.appendChild(c);
-  document.body.appendChild(wrap);
-}
+$('segSource').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const k = b.dataset.source;
+  if (k === 'demo') useDemo(); else useCamera(k);
+  press($('segSource'),'source',k);
+});
 
 /* ── boot ─────────────────────────────────────────────────────────── */
 addEventListener('resize', () => { resize(); });
