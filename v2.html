@@ -52,6 +52,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 #viewport{position:fixed;inset:0;touch-action:none;background:#000}
 #viewport canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #hud{pointer-events:none}
+#gl{pointer-events:none}
 
 /* ── floating chrome ──────────────────────────────────────────────── */
 #topbar{
@@ -219,6 +220,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="viewport">
   <canvas id="acc"></canvas>
+  <canvas id="gl" hidden></canvas>
   <canvas id="hud"></canvas>
 </div>
 
@@ -247,7 +249,39 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     <div class="seg" id="segSource" role="group" aria-label="Source">
       <button data-source="environment">Rear</button>
       <button data-source="user">Front</button>
+      <button data-source="file">File</button>
       <button data-source="demo" aria-pressed="true">Demo</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="label"><span>Anti-aliasing</span><output id="oAAmem"></output></div>
+    <div class="seg" id="segAA" role="group" aria-label="Anti-aliasing">
+      <button data-aa="off" aria-pressed="true">Off</button>
+      <button data-aa="on">On</button>
+    </div>
+    <p class="hint" id="aaHint" style="margin:8px 0 0">
+      Samples a rolling buffer of past frames with sub-pixel and sub-frame
+      interpolation. Sweep and Radial only.
+    </p>
+  </div>
+
+  <div id="aaControls" hidden>
+    <div class="group">
+      <div class="label"><span>Time depth</span><output id="oDepth">120 frames</output></div>
+      <input type="range" id="sDepth" min="30" max="600" step="10" value="120" aria-label="Time depth in frames">
+    </div>
+    <div class="group">
+      <div class="label"><span>Buffer quality</span><output id="oQual">Medium</output></div>
+      <div class="seg" id="segQual" role="group" aria-label="Buffer quality">
+        <button data-qual="180">Low</button>
+        <button data-qual="288" aria-pressed="true">Medium</button>
+        <button data-qual="432">High</button>
+      </div>
+    </div>
+    <div class="group">
+      <div class="label"><span>Temporal blur</span><output id="oBlur">0.00</output></div>
+      <input type="range" id="sBlur" min="0" max="1" step="0.02" value="0" aria-label="Temporal blur window">
     </div>
   </div>
 
@@ -346,6 +380,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="snack" role="status" aria-live="polite"></div>
 <video id="vid" playsinline muted loop autoplay></video>
+<input type="file" id="file" accept="video/*" hidden>
 
 <script>
 (() => {
@@ -638,12 +673,299 @@ function drawHud(){
   }
 }
 
+/* ── WebGL2 time-displacement engine ──────────────────────────────────
+   A different algorithm from the 2D path. Instead of accumulating slices
+   destructively, it keeps the last N frames in a 3D texture and, every
+   tick, re-renders the whole image: each pixel samples the buffer at a
+   time depth derived from the slit geometry.
+
+   Spatial anti-aliasing is hardware bilinear (LINEAR on S,T). Sub-frame
+   temporal blending is done explicitly with two taps and a mix, because
+   the ring buffer's seam puts the newest frame next to the oldest and
+   hardware filtering across R would blend unrelated moments there.
+   Sampling at exact texel centres makes R filtering a no-op.           */
+const AA = {
+  on:false, depth:120, qual:288, blur:0,
+  gl:null, prog:null, tex:null, vao:null, u:{},
+  hw:0, hh:0, layers:0, head:-1, filled:0, lost:false,
+  scaleCv:null, scaleCtx:null,
+};
+const AA_BUDGET_MB = 192;
+
+const VS = `#version 300 es
+void main(){
+  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+const FS = `#version 300 es
+precision highp float;
+precision highp sampler3D;
+out vec4 outColor;
+uniform sampler3D uHist;
+uniform vec2  uRes;
+uniform float uDepth;     // allocated layers
+uniform float uHead;      // physical layer of the newest frame
+uniform float uUsable;    // frames actually available
+uniform int   uMode;      // 0 sweep, 1 radial
+uniform float uAngle;
+uniform vec2  uPivot;
+uniform float uBlur;
+uniform float uSpan;
+uniform float uAspect;
+
+/* one sample at a fractional age, interpolated between two frames */
+vec4 tapAge(vec2 uv, float age){
+  float a0 = floor(age), f = age - a0;
+  float z0 = mod(uHead - a0 + uDepth, uDepth);
+  float z1 = mod(uHead - a0 - 1.0 + uDepth, uDepth);
+  vec4 c0 = texture(uHist, vec3(uv, (z0 + 0.5) / uDepth));
+  vec4 c1 = texture(uHist, vec3(uv, (z1 + 0.5) / uDepth));
+  return mix(c0, c1, f);
+}
+
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec2 p = uv - uPivot;
+  p.x *= uAspect;
+
+  float t;
+  if (uMode == 1){
+    float ang = atan(p.y, p.x) - uAngle;
+    t = fract(ang / 6.28318530718 + 1.0);
+  } else {
+    vec2 n = vec2(-sin(uAngle), cos(uAngle));
+    t = clamp(dot(p, n) * uSpan + 0.5, 0.0, 1.0);
+  }
+
+  float maxAge = max(uUsable - 2.0, 0.0);
+  float base = t * maxAge;
+
+  /* Exposure window in FRAMES, not a fraction of the buffer. Spreading 8
+     taps over a long window samples it too sparsely and yields 8 discrete
+     ghosts instead of a blur; ~1 frame apart keeps coverage continuous,
+     and each tap is itself a two-frame lerp. */
+  float window = uBlur * 8.0;
+  /* Tap count must track the window, not lag it: 2 taps across 2 frames is
+     a double image, which reads as worse than no blur at all. Keeping the
+     spacing at ~1 frame makes the exposure continuous. */
+  int K = int(clamp(1.0 + ceil(window), 1.0, 8.0));
+  vec4 acc = vec4(0.0);
+  for (int i = 0; i < 8; i++){
+    if (i >= K) break;
+    float o = (K == 1) ? 0.0
+            : (float(i) / float(K - 1) - 0.5) * window;
+    acc += tapAge(uv, clamp(base + o, 0.0, maxAge));
+  }
+  outColor = acc / float(K);
+}`;
+
+function aaCompile(gl, type, srcTxt){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, srcTxt); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(s) || 'shader compile failed');
+  return s;
+}
+
+function aaInit(){
+  if (AA.gl) return true;
+  const gl = $('gl').getContext('webgl2', {
+    alpha:false, antialias:false, depth:false, stencil:false,
+    preserveDrawingBuffer:true,      // export reads the drawing buffer back
+    powerPreference:'high-performance',
+  });
+  if (!gl){ snack('This browser has no WebGL2 — anti-aliasing unavailable.', 5000); return false; }
+  AA.gl = gl;
+
+  try{
+    const p = gl.createProgram();
+    gl.attachShader(p, aaCompile(gl, gl.VERTEX_SHADER, VS));
+    gl.attachShader(p, aaCompile(gl, gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS))
+      throw new Error(gl.getProgramInfoLog(p) || 'link failed');
+    AA.prog = p;
+    for (const n of ['uHist','uRes','uDepth','uHead','uUsable','uMode',
+                     'uAngle','uPivot','uBlur','uSpan','uAspect'])
+      AA.u[n] = gl.getUniformLocation(p, n);
+    AA.vao = gl.createVertexArray();
+  } catch(e){
+    snack('Anti-aliasing shader failed: ' + e.message, 6000);
+    AA.gl = null; return false;
+  }
+
+  // iOS drops GL contexts under memory pressure; without this the app
+  // would go black and stay black
+  $('gl').addEventListener('webglcontextlost', e => {
+    e.preventDefault(); AA.lost = true;
+    snack('Graphics context lost — anti-aliasing paused.', 4000);
+    aaSetOn(false);
+  });
+  $('gl').addEventListener('webglcontextrestored', () => {
+    AA.lost = false; AA.gl = null; AA.tex = null;
+  });
+  return true;
+}
+
+function aaBytes(depth = AA.depth, qual = AA.qual){
+  const a = innerWidth / innerHeight;
+  const w = Math.round(qual * Math.max(1, a));
+  const h = Math.round(qual * Math.max(1, 1/a));
+  return { w, h, bytes: w * h * 4 * depth };
+}
+function aaMaxDepth(qual = AA.qual){
+  const { w, h } = aaBytes(1, qual);
+  return Math.max(30, Math.floor(AA_BUDGET_MB * 1048576 / (w * h * 4)));
+}
+
+function aaFree(){
+  if (AA.gl && AA.tex){ AA.gl.deleteTexture(AA.tex); AA.tex = null; }
+  AA.head = -1; AA.filled = 0;
+}
+
+function aaAlloc(){
+  const gl = AA.gl; if (!gl) return false;
+  aaFree();                                   // GPU textures are not GC'd
+  const { w, h } = aaBytes();
+  const depth = Math.min(AA.depth, aaMaxDepth());
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_3D, tex);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+  while (gl.getError() !== gl.NO_ERROR){ /* drain */ }
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA8, w, h, depth, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  const err = gl.getError();
+  if (err !== gl.NO_ERROR){
+    gl.deleteTexture(tex);
+    snack('Not enough graphics memory for that buffer — reduce depth.', 5000);
+    return false;
+  }
+  AA.tex = tex; AA.hw = w; AA.hh = h; AA.layers = depth;
+  AA.head = -1; AA.filled = 0;
+
+  if (!AA.scaleCv){ AA.scaleCv = document.createElement('canvas');
+                    AA.scaleCtx = AA.scaleCv.getContext('2d'); }
+  AA.scaleCv.width = w; AA.scaleCv.height = h;
+  return true;
+}
+
+/* downscale the live frame to history resolution, then push one layer */
+function aaPush(){
+  const gl = AA.gl; if (!gl || !AA.tex || !src.el || !src.w) return;
+  const g = AA.scaleCtx, w = AA.hw, h = AA.hh;
+  const s = Math.max(w/src.w, h/src.h);
+  const dw = src.w*s, dh = src.h*s, ox = (w-dw)/2, oy = (h-dh)/2;
+  g.setTransform(1,0,0,1,0,0);
+  if (src.mirror){ g.save(); g.translate(w,0); g.scale(-1,1);
+                   g.drawImage(src.el, ox, oy, dw, dh); g.restore(); }
+  else g.drawImage(src.el, ox, oy, dw, dh);
+
+  AA.head = (AA.head + 1) % AA.layers;
+  gl.bindTexture(gl.TEXTURE_3D, AA.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, AA.head, w, h, 1,
+                   gl.RGBA, gl.UNSIGNED_BYTE, AA.scaleCv);
+  if (AA.filled < AA.layers) AA.filled++;
+}
+
+function aaRender(outW, outH){
+  const gl = AA.gl; if (!gl || !AA.tex || AA.filled < 2) return;
+  const cv = $('gl');
+  if (cv.width !== outW || cv.height !== outH){ cv.width = outW; cv.height = outH; }
+  gl.viewport(0,0,outW,outH);
+  gl.useProgram(AA.prog);
+  gl.bindVertexArray(AA.vao);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_3D, AA.tex);
+
+  const th = (S.mode === 'radial' ? phi : S.angle*DEG);
+  const aspect = outW / outH;
+  const nx = -Math.sin(th), ny = Math.cos(th);
+  const half = .5*Math.abs(nx)*aspect + .5*Math.abs(ny);
+
+  gl.uniform1i(AA.u.uHist, 0);
+  gl.uniform2f(AA.u.uRes, outW, outH);
+  gl.uniform1f(AA.u.uDepth, AA.layers);
+  gl.uniform1f(AA.u.uHead, AA.head);
+  gl.uniform1f(AA.u.uUsable, AA.filled);
+  gl.uniform1i(AA.u.uMode, S.mode === 'radial' ? 1 : 0);
+  gl.uniform1f(AA.u.uAngle, th);
+  gl.uniform2f(AA.u.uPivot, S.cx, 1 - S.cy);      // GL origin is bottom-left
+  gl.uniform1f(AA.u.uBlur, AA.blur);
+  gl.uniform1f(AA.u.uSpan, 1/(2*Math.max(half, 1e-4)));
+  gl.uniform1f(AA.u.uAspect, aspect);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+const aaEligible = () => AA.on && S.mode !== 'strip' && !AA.lost && AA.gl && AA.tex;
+
+function aaSetOn(on){
+  AA.on = on;
+  press($('segAA'),'aa', on ? 'on':'off');
+  $('aaControls').hidden = !on;
+  if (on){
+    if (!aaInit()){ AA.on = false; press($('segAA'),'aa','off'); $('aaControls').hidden = true; return; }
+    if (!aaAlloc()){ AA.on = false; press($('segAA'),'aa','off'); $('aaControls').hidden = true; return; }
+  } else {
+    aaFree();
+  }
+  $('gl').hidden = !aaEligible();
+  $('acc').hidden = !!aaEligible();
+  aaSyncLabels();
+}
+function aaSyncLabels(){
+  const { bytes } = aaBytes();
+  const cap = aaMaxDepth();
+  $('sDepth').max = Math.min(600, cap);
+  if (AA.depth > cap){ AA.depth = cap; $('sDepth').value = cap; }
+  $('oDepth').textContent = `${AA.depth} frames`;
+  $('oQual').textContent = AA.qual === 180 ? 'Low' : AA.qual === 288 ? 'Medium' : 'High';
+  $('oAAmem').textContent = AA.on
+    ? `${AA.hw}×${AA.hh} · ${(bytes/1048576).toFixed(0)} MB`
+    : `${(bytes/1048576).toFixed(0)} MB`;
+  $('oBlur').textContent = AA.blur.toFixed(2);
+}
+
+$('segAA').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.aa === 'on' && S.mode === 'strip'){
+    snack('Strip has no fixed time depth — use Sweep or Radial.', 4000); return;
+  }
+  aaSetOn(b.dataset.aa === 'on');
+});
+$('sDepth').addEventListener('input', e => {
+  AA.depth = +e.target.value; aaSyncLabels();
+});
+$('sDepth').addEventListener('change', () => { if (AA.on) aaAlloc(), aaSyncLabels(); });
+$('segQual').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  AA.qual = +b.dataset.qual; press($('segQual'),'qual',AA.qual);
+  if (AA.on) aaAlloc();
+  aaSyncLabels();
+});
+$('sBlur').addEventListener('input', e => { AA.blur = +e.target.value; aaSyncLabels(); });
+
 /* ── loop ─────────────────────────────────────────────────────────── */
 function frame(dt){
   if (src.kind === 'demo') renderDemo(dt);
   if (!src.el || !W) return;
 
   glow += (glowTarget - glow) * Math.min(1, dt*8);
+
+  if (aaEligible()){
+    // live time-displacement: the whole image re-renders every tick.
+    // Export freezes the buffer, which is what Hold means here.
+    if (state !== 'export') aaPush();
+    if (S.mode === 'radial') stepRadial(dt); else stepSweep(dt);
+    const k = Math.min(devicePixelRatio || 1, 2) * 0.75;   // soft by design
+    aaRender(Math.max(2, Math.round(innerWidth*k)), Math.max(2, Math.round(innerHeight*k)));
+    drawHud(); syncReadout();
+    return;
+  }
 
   if (state === 'idle'){
     ax.setTransform(1,0,0,1,0,0);
@@ -697,6 +1019,13 @@ function setState(next){
 
 /* ── export ───────────────────────────────────────────────────────── */
 function exportCanvas(kind){
+  if (aaEligible()){
+    const c = document.createElement('canvas');
+    c.width = 1920; c.height = 1080;
+    aaRender(1920, 1080);                     // re-render at export size
+    c.getContext('2d').drawImage($('gl'), 0, 0, 1920, 1080);
+    return c;
+  }
   if (kind === 'strip' && S.mode === 'strip' && stripCv && stripX > 0){
     const c = document.createElement('canvas');
     c.width = Math.min(stripX, CAP); c.height = stripCv.height;
@@ -772,8 +1101,11 @@ const press = (g, attr, val) =>
   [...g.children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === String(val))));
 
 $('shutter').addEventListener('click', () => {
-  if (state === 'scanning') setState('export');
-  else setState('scanning');
+  if (state === 'scanning') return setState('export');
+  // the AA engine is always live, so there is nothing to accumulate —
+  // the shutter is a capture, not a start
+  if (aaEligible()) return setState('export');
+  setState('scanning');
 });
 
 $('segMode').addEventListener('click', e => {
@@ -826,6 +1158,11 @@ function applyMode(){
   press($('segMode'),'mode',S.mode);
   press($('segBlades'),'blades',S.blades);
   $('grpBlades').hidden = S.mode !== 'radial';
+  // Strip accumulates without bound, so it has no fixed time depth to sample
+  if (S.mode === 'strip' && AA.on) aaSetOn(false);
+  if (typeof aaEligible === 'function'){
+    $('gl').hidden = !aaEligible(); $('acc').hidden = !!aaEligible();
+  }
   $('lSlice').textContent = S.mode==='sweep' ? 'Slit' : S.mode==='radial' ? 'Blade' : 'Rate';
   $('sSlice').max = S.mode==='sweep' ? 60 : S.mode==='radial' ? 20 : 12;
   setSlice(clamp(S.slice, 1, +$('sSlice').max));
@@ -931,14 +1268,37 @@ $('btnSource').addEventListener('click', () => {
 $('segSource').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   const k = b.dataset.source;
-  if (k === 'demo') useDemo(); else useCamera(k);
+  if (k === 'demo') useDemo();
+  else if (k === 'file') $('file').click();     // sync: keeps the user gesture
+  else useCamera(k);
   press($('segSource'),'source',k);
 });
+$('file').addEventListener('change', e => { if (e.target.files[0]) useFile(e.target.files[0]); });
+
+async function useFile(f){
+  stopStream(); video.srcObject = null;
+  const url = URL.createObjectURL(f);
+  video.src = url;
+  try{
+    await video.play().catch(()=>{});
+    await waitForFrames();                     // same iOS metadata race
+    src.el = video; src.w = video.videoWidth; src.h = video.videoHeight;
+    src.kind = 'file'; src.mirror = false;
+    resize(); clearAcc();
+    snack(`${f.name} · ${src.w}×${src.h}`, 1800);
+  } catch(e){
+    URL.revokeObjectURL(url);
+    snack('Couldn’t read that video.', 4000);
+  }
+}
 
 /* ── boot ─────────────────────────────────────────────────────────── */
-addEventListener('resize', () => { resize(); });
+addEventListener('resize', () => {
+  resize();
+  if (AA.on) { aaAlloc(); aaSyncLabels(); }   // history aspect follows the viewport
+});
 document.addEventListener('visibilitychange', () => { last = 0; });
-applyMode(); setState('idle'); useDemo();
+applyMode(); setState('idle'); useDemo(); aaSyncLabels();
 requestAnimationFrame(tick);
 
 window.__slit2 = {
