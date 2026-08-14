@@ -83,11 +83,6 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   min-height:44px;padding-top:2px;display:flex;align-items:flex-start;
 }
 
-/* the slit motif: a mint rule pinned to the right edge */
-#slitEdge{
-  position:fixed;right:0;top:45px;bottom:calc(var(--bar-h) + var(--safe-b));
-  width:4px;background:var(--mint);z-index:2;pointer-events:none;
-}
 
 /* ── bottom: the mint bar ─────────────────────────────────────────── */
 #bar{
@@ -301,8 +296,6 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <button class="txt-btn" id="btnTune">Camera</button>
 </div>
 
-<div id="slitEdge" aria-hidden="true"></div>
-
 <button id="shutter" aria-label="Capture"></button>
 
 <div id="bar">
@@ -469,7 +462,7 @@ let W = 0, H = 0;                      // accumulation size (viewport aspect)
 let state = 'idle';                    // idle | scanning | export
 
 const S = {
-  mode:'radial', angle:0, pos:50, slice:1, blades:1,
+  mode:'radial', angle:0, pos:50, slice:1, blades:1, dir:'right',
   cx:.5, cy:.5, snap:'free', reverse:false, guides:true, manual:false,
 };
 const RATE = { sweep:200, radial:40, strip:20 };   // fixed, per geometry
@@ -658,24 +651,60 @@ function onCapReached(){
 }
 
 /* ── HUD: the barrel. Ghosts when untouched, blooms under the thumb ── */
+const MINT = '206,253,211';
+
+/* The lime line IS the slit — it marks where the scan is reading right now,
+   so it is drawn at full strength in every state. The bezel behind it is
+   still an instrument: ghosted at rest, bloomed while you are swiping. */
+function drawSlit(){
+  const D = Math.hypot(W,H);
+  const px4 = Math.max(2, 4 * (W / Math.max(innerWidth,1)));   // 4 CSS px
+  hx.lineCap = 'butt';
+  hx.lineWidth = px4;
+  hx.strokeStyle = `rgb(${MINT})`;
+
+  if (S.mode === 'radial'){
+    const px = S.cx*W, py = S.cy*H;
+    for (let k=0;k<S.blades;k++){
+      const ang = phi + k*TAU/S.blades;
+      hx.globalAlpha = k ? .45 : 1;
+      hx.beginPath(); hx.moveTo(px,py);
+      hx.lineTo(px+Math.cos(ang)*D, py+Math.sin(ang)*D); hx.stroke();
+    }
+    hx.globalAlpha = 1;
+  } else if (S.mode === 'sweep'){
+    const th = S.angle*DEG, nx=-Math.sin(th), ny=Math.cos(th);
+    const dxv=Math.cos(th), dyv=Math.sin(th);
+    const bx = W/2 + nx*sweepS, by = H/2 + ny*sweepS;
+    hx.beginPath();
+    hx.moveTo(bx-dxv*D, by-dyv*D); hx.lineTo(bx+dxv*D, by+dyv*D); hx.stroke();
+  } else {
+    const th = S.angle*DEG, px = S.cx*W, py = S.cy*H;
+    hx.beginPath();
+    hx.moveTo(px-Math.cos(th)*D, py-Math.sin(th)*D);
+    hx.lineTo(px+Math.cos(th)*D, py+Math.sin(th)*D); hx.stroke();
+  }
+}
+
 function drawHud(){
   hx.setTransform(1,0,0,1,0,0);
   hx.clearRect(0,0,W,H);
   if (!S.guides || !src.el) return;
-  // Idle is for framing: no bezel, no blade, nothing over the picture.
-  // The instrument appears when a scan starts, or while you are aiming it.
+
+  drawSlit();                               // the reference, always visible
+
+  // everything below is the instrument, and stays out of the way when idle
   if (state === 'idle' && glow < .02) return;
 
   const u = Math.max(1, Math.min(W,H)/420);
-  const a = .16 + .84*glow;                 // ghosted → bloomed
+  const a = .16 + .84*glow;
   hx.lineWidth = 1.5*u;
-  hx.font = `${11*u}px ${getComputedStyle(document.body).getPropertyValue('--mono')}`;
+  hx.font = `${11*u}px ${getComputedStyle(document.body).getPropertyValue('--sans')}`;
   hx.textAlign = 'center'; hx.textBaseline = 'middle';
 
-  // HD export frame: what the 1920x1080 still will actually keep
-  if (state !== 'idle'){
+  if (state !== 'idle'){                    // what the HD still will keep
     const fh = Math.min(H, W*9/16), fw = Math.min(W, H*16/9);
-    hx.strokeStyle = `rgba(213,198,180,${.28*a})`;
+    hx.strokeStyle = `rgba(${MINT},${.24*a})`;
     hx.setLineDash([6*u,6*u]);
     hx.strokeRect((W-fw)/2, (H-fh)/2, fw, fh);
     hx.setLineDash([]);
@@ -683,41 +712,23 @@ function drawHud(){
 
   if (S.mode === 'radial'){
     const px = S.cx*W, py = S.cy*H, R = Math.min(W,H)*.34;
-    hx.strokeStyle = `rgba(237,224,212,${.30*a})`;
+    hx.strokeStyle = `rgba(${MINT},${.26*a})`;
     hx.beginPath(); hx.arc(px,py,R,0,TAU); hx.stroke();
     for (let d=0; d<360; d+=15){
       const long = d%45===0, r = long ? R-13*u : R-6*u;
       const c = Math.cos(d*DEG), s = Math.sin(d*DEG);
-      hx.strokeStyle = `rgba(237,224,212,${(long?.62:.24)*a})`;
+      hx.strokeStyle = `rgba(${MINT},${(long?.55:.22)*a})`;
       hx.beginPath(); hx.moveTo(px+c*R,py+s*R); hx.lineTo(px+c*r,py+s*r); hx.stroke();
     }
-    hx.fillStyle = `rgba(237,224,212,${.55*a})`;
-    for (let d=0; d<360; d+=90)
-      hx.fillText(String(d).padStart(3,'0'), px+Math.cos(d*DEG)*(R-27*u), py+Math.sin(d*DEG)*(R-27*u));
-    const D = Math.hypot(W,H);
-    for (let k=0;k<S.blades;k++){
-      const ang = phi + k*TAU/S.blades;
-      hx.strokeStyle = `rgba(255,184,104,${(k?.34:.95)*Math.max(a,.55)})`;
-      hx.beginPath(); hx.moveTo(px,py); hx.lineTo(px+Math.cos(ang)*D, py+Math.sin(ang)*D); hx.stroke();
-    }
-    hx.strokeStyle = `rgba(255,184,104,${.9*Math.max(a,.5)})`;
+    hx.strokeStyle = `rgba(${MINT},${.8*Math.max(a,.5)})`;
+    hx.lineWidth = 1.5*u;
     hx.beginPath(); hx.arc(px,py,7*u,0,TAU); hx.stroke();
 
   } else if (S.mode === 'sweep'){
     const th = S.angle*DEG, nx=-Math.sin(th), ny=Math.cos(th);
-    const dxv=Math.cos(th), dyv=Math.sin(th), D=Math.hypot(W,H);
-    const cx=W/2, cy=H/2, bx=cx+nx*sweepS, by=cy+ny*sweepS, L=sweepLength();
-    hx.strokeStyle = `rgba(237,224,212,${.20*a})`;
+    const cx=W/2, cy=H/2, L=sweepLength();
+    hx.strokeStyle = `rgba(${MINT},${.18*a})`;      // the travel track
     hx.beginPath(); hx.moveTo(cx-nx*L/2,cy-ny*L/2); hx.lineTo(cx+nx*L/2,cy+ny*L/2); hx.stroke();
-    hx.strokeStyle = `rgba(255,184,104,${.95*Math.max(a,.55)})`;
-    hx.beginPath(); hx.moveTo(bx-dxv*D,by-dyv*D); hx.lineTo(bx+dxv*D,by+dyv*D); hx.stroke();
-
-  } else {
-    const th = S.angle*DEG, D = Math.hypot(W,H), px = S.cx*W, py = S.cy*H;
-    hx.strokeStyle = `rgba(255,184,104,${.95*Math.max(a,.55)})`;
-    hx.beginPath();
-    hx.moveTo(px-Math.cos(th)*D, py-Math.sin(th)*D);
-    hx.lineTo(px+Math.cos(th)*D, py+Math.sin(th)*D); hx.stroke();
   }
 }
 
@@ -1219,39 +1230,59 @@ function toCanvas(ev){
   const r = acc.getBoundingClientRect();
   return { x:(ev.clientX-r.left)/r.width*W, y:(ev.clientY-r.top)/r.height*H };
 }
+/* Swipe picks which side the slit comes from — you no longer aim it by hand.
+   Swipe:  you drag the way the slit TRAVELS, so it enters from behind you
+           (drag up -> slit rises from below).
+   Radial / Split: you drag toward where the blade should POINT
+           (drag left -> slit on the left).                              */
+const SWIPE_OPPOSITE = { up:'bottom', down:'top', left:'right', right:'left' };
+const SWIPE_SAME     = { up:'top', down:'bottom', left:'left', right:'right' };
+// sweep: slit orientation whose travel starts at that edge
+const EDGE_SWEEP = { top:0,   right:90,  bottom:180, left:270 };
+// radial/strip: the direction the blade points
+const EDGE_POINT = { right:0, bottom:90, left:180,   top:270  };
+
+function setDir(dir, announce){
+  S.dir = dir;
+  if (S.mode === 'sweep'){
+    S.angle = EDGE_SWEEP[dir];
+    sweepS = sweepPrev = -sweepLength()/2;      // restart from that edge
+  } else {
+    S.angle = EDGE_POINT[dir];
+    phi = S.angle * DEG;
+  }
+  S.manual = false;                             // the machine drives from here
+  $('oAngle').textContent = S.angle.toFixed(0) + '°';
+  clearAcc();
+  if (announce) snack('Slit from ' + dir, 1300);
+}
+
+let dragStart = null;
+const SWIPE_MIN = 28;                           // px before it counts
+
+/* The swipe owns the whole canvas. Grabbing the pivot here would swallow it:
+   the pivot sits at screen centre by default, which is exactly where a thumb
+   starts a swipe. Pivot is repositioned from Advanced instead. */
 vp.addEventListener('pointerdown', ev => {
   if (!src.el || !W) return;
   vp.setPointerCapture(ev.pointerId);
-  const p = toCanvas(ev), u = Math.max(1, Math.min(W,H)/420);
-  dragging = (S.mode !== 'sweep' && Math.hypot(p.x-S.cx*W, p.y-S.cy*H) < 26*u)
-    ? 'pivot' : 'aim';
+  dragging = 'swipe';
+  dragStart = { x: ev.clientX, y: ev.clientY };
   glowTarget = 1;
-  if (dragging === 'aim') S.manual = true;
-  onDrag(ev);
 });
-vp.addEventListener('pointermove', ev => { if (dragging) onDrag(ev); });
-['pointerup','pointercancel'].forEach(t => vp.addEventListener(t, () => {
-  dragging = null; glowTarget = 0;
-  if (S.snap === 'free') S.manual = false;      // springs back to auto
+['pointerup','pointercancel'].forEach(t => vp.addEventListener(t, ev => {
+  if (dragging === 'swipe' && dragStart){
+    const dx = ev.clientX - dragStart.x, dy = ev.clientY - dragStart.y;
+    if (Math.hypot(dx, dy) >= SWIPE_MIN){
+      const drag = Math.abs(dx) > Math.abs(dy)
+        ? (dx > 0 ? 'right' : 'left')
+        : (dy > 0 ? 'down'  : 'up');
+      setDir((S.mode === 'sweep' ? SWIPE_OPPOSITE : SWIPE_SAME)[drag], true);
+    }
+  }
+  dragging = null; dragStart = null; glowTarget = 0;
 }));
 
-function onDrag(ev){
-  const p = toCanvas(ev);
-  if (dragging === 'pivot'){
-    S.cx = clamp(p.x/W,0,1); S.cy = clamp(p.y/H,0,1); return;
-  }
-  if (S.mode === 'sweep'){
-    const th = S.angle*DEG, nx=-Math.sin(th), ny=Math.cos(th), L=sweepLength();
-    S.pos = clamp((((p.x-W/2)*nx + (p.y-H/2)*ny)/L + .5)*100, 0, 100);
-  } else {
-    let d = (Math.atan2(p.y-S.cy*H, p.x-S.cx*W)/DEG + 360) % 360;
-    for (const t of [0,45,90,135,180,225,270,315,360])   // visual detents
-      if (Math.abs(d-t) < 4) d = t % 360;
-    S.angle = d;
-    if (S.mode === 'radial') phi = d*DEG;
-    $('oAngle').textContent = d.toFixed(0)+'°';
-  }
-}
 
 /* ── sources ──────────────────────────────────────────────────────── */
 function stopStream(){ if (src.stream){ src.stream.getTracks().forEach(t=>t.stop()); src.stream=null; } }
@@ -1271,12 +1302,14 @@ function useDemo(){
   src.kind = 'demo'; src.mirror = false;
   resize(); clearAcc();
 }
-async function useCamera(facing){
-  if (!navigator.mediaDevices?.getUserMedia)
-    return snack(isSecureContext ? 'No camera API in this browser.'
-                                 : 'Camera needs https.', 5000);
+async function useCamera(facing, quiet){
+  if (!navigator.mediaDevices?.getUserMedia){
+    if (!quiet) snack(isSecureContext ? 'No camera API in this browser.'
+                                      : 'Camera needs https.', 5000);
+    throw new Error('NoCameraAPI');
+  }
   try{
-    stopStream(); snack('Starting camera…', 8000);
+    stopStream(); if (!quiet) snack('Starting camera…', 8000);
     const stream = await navigator.mediaDevices.getUserMedia({
       video:{ facingMode:facing, width:{ideal:1920}, height:{ideal:1080} }, audio:false });
     src.stream = stream; src.facing = facing;
@@ -1286,15 +1319,18 @@ async function useCamera(facing){
     src.el = video; src.w = video.videoWidth; src.h = video.videoHeight;
     src.kind = 'camera'; src.mirror = (facing === 'user');
     resize(); clearAcc();
-    snack(`${facing==='user'?'Front':'Rear'} camera · ${src.w}×${src.h}`, 1600);
+    press($('segSource'),'source',facing);
+    if (!quiet) snack(`${facing==='user'?'Front':'Rear'} camera · ${src.w}×${src.h}`, 1600);
   } catch(e){
     stopStream();
     const n = e && e.name;
-    snack(n==='NotAllowedError' ? 'Camera blocked. Safari ▸ aA ▸ Website Settings ▸ Camera ▸ Allow.'
-        : n==='NotFoundError'   ? 'No camera on this device.'
-        : n==='NotReadableError'? 'Camera busy — close other apps.'
-        : e && e.message==='NoFrames' ? 'Camera sent no frames. Reload and retry.'
-        : 'Couldn’t open camera: '+(n||'unknown'), 5000);
+    if (!quiet)
+      snack(n==='NotAllowedError' ? 'Camera blocked. Safari ▸ aA ▸ Website Settings ▸ Camera ▸ Allow.'
+          : n==='NotFoundError'   ? 'No camera on this device.'
+          : n==='NotReadableError'? 'Camera busy — close other apps.'
+          : e && e.message==='NoFrames' ? 'Camera sent no frames. Reload and retry.'
+          : 'Couldn’t open camera: '+(n||'unknown'), 5000);
+    throw e;
   }
 }
 /* Slice thickness cycles straight off the bar: 1 · 2 · 4 · 8 · 16 */
@@ -1345,7 +1381,25 @@ addEventListener('resize', () => {
   if (AA.on) { aaAlloc(); aaSyncLabels(); }   // history aspect follows the viewport
 });
 document.addEventListener('visibilitychange', () => { last = 0; });
-applyMode(); setState('idle'); useDemo(); aaSyncLabels();
+applyMode(); setState('idle'); aaSyncLabels();
+
+/* The live preview is the camera. Demo renders first so there is never a
+   black screen, then the camera replaces it. iOS only grants getUserMedia
+   without a gesture once the origin already has permission, so a refusal
+   here is expected on a first visit — we stay on demo and say how to fix it
+   rather than failing to a blank viewport. */
+(async () => {
+  useDemo();
+  try {
+    await useCamera('environment', true);
+  } catch (e) {
+    press($('segSource'),'source','');
+    if (e && e.name === 'NotAllowedError')
+      snack('Tap Camera ▸ Rear to allow the camera.', 5000);
+    else if (!isSecureContext)
+      snack('Camera needs https — showing the demo source.', 5000);
+  }
+})();
 requestAnimationFrame(tick);
 
 window.__slit2 = {
