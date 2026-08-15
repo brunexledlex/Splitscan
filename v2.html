@@ -1026,6 +1026,10 @@ $('sBlur').addEventListener('input', e => { AA.blur = +e.target.value; aaSyncLab
 
 /* ── loop ─────────────────────────────────────────────────────────── */
 function frame(dt){
+  // Captured: hold the image. Without this the geometry keeps stepping and
+  // the AA engine keeps re-rendering, so the preview drifts away from the
+  // frame you actually took.
+  if (state === 'export') return;
   if (src.kind === 'demo') renderDemo(dt);
   if (!src.el || !W) return;
 
@@ -1061,6 +1065,13 @@ function frame(dt){
    The snapshot is held because the AA engine keeps moving underneath. */
 function completePass(){
   snapshot = exportCanvas();
+  // exportCanvas resized the GL canvas to 1920x1080 to render the still;
+  // put the display render back so the frozen preview is not stretched
+  if (aaEligible()){
+    const k = Math.min(devicePixelRatio || 1, 2) * 0.75;
+    aaRender(Math.max(2, Math.round(innerWidth*k)),
+             Math.max(2, Math.round(innerHeight*k)));
+  }
   setState('export');
   snack('Captured \u00B7 ' + S.mode, 1800);
 }
