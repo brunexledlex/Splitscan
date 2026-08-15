@@ -78,10 +78,12 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 #topbar > *{pointer-events:auto}
 #mark{color:var(--mint);line-height:0}
 #mark svg{width:75px;height:20px;display:block;fill:currentColor}
-.txt-btn{
-  font-size:12px;line-height:15px;color:var(--mint);
-  min-height:44px;padding-top:2px;display:flex;align-items:flex-start;
+.top-actions{display:flex;align-items:center;gap:12px}
+.icon-btn{
+  width:40px;height:40px;flex:0 0 40px;display:grid;place-items:center;
+  border-radius:50%;color:var(--mint);
 }
+.icon-btn svg{width:24px;height:24px;fill:currentColor;display:block}
 
 
 /* ── bottom: the mint bar ─────────────────────────────────────────── */
@@ -195,6 +197,49 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .chip[aria-pressed="true"]{background:var(--p-container);color:var(--on-p-container);border-color:transparent}
 .chip svg{width:18px;height:18px;fill:currentColor}
 
+/* roll: a thumbnail of the last capture, sat next to settings */
+#btnRoll{
+  position:relative;width:40px;height:40px;flex:0 0 40px;
+  border-radius:9px;border:2px solid var(--mint);background:var(--black);
+  display:grid;place-items:center;
+}
+#btnRoll img{width:100%;height:100%;object-fit:cover;display:block;border-radius:7px}
+#rollBadge{
+  position:absolute;top:-7px;right:-7px;min-width:19px;height:19px;padding:0 5px;
+  border-radius:10px;background:var(--mint);color:var(--black);
+  font-size:10px;line-height:19px;text-align:center;font-weight:700;
+}
+.card.roll{
+  width:min(92vw,420px);
+  top:50%;                                   /* centred: the grid is tall */
+  transform:translate(-50%,-50%) scale(.96);
+  max-height:min(78dvh,640px);
+}
+.card.roll.on{transform:translate(-50%,-50%) scale(1)}
+#rollGrid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%;
+  max-height:min(52dvh,420px);overflow-y:auto;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+#rollGrid:empty::after{
+  content:'No captures yet';grid-column:1/-1;text-align:center;
+  font-size:12px;color:rgba(0,0,0,.55);padding:18px 0;
+}
+.thumb{
+  position:relative;aspect-ratio:9/16;border-radius:10px;overflow:hidden;
+  background:var(--black);border:2px solid var(--black);
+  transition:opacity .12s var(--ease);
+}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb[aria-pressed="false"]{opacity:.3;border-color:transparent}
+.thumb .tick{
+  position:absolute;right:4px;top:4px;width:17px;height:17px;border-radius:50%;
+  background:var(--mint);color:var(--black);font-size:11px;line-height:17px;
+  text-align:center;font-weight:700;
+}
+.thumb[aria-pressed="false"] .tick{background:rgba(255,255,255,.25);color:transparent}
+.cpill:disabled{opacity:.4}
+
 /* ── export card (Figma Frame 8): mint, centred, three pills ──────── */
 .card{
   position:fixed;left:50%;top:53.2%;transform:translate(-50%,0) scale(.96);
@@ -262,7 +307,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 /* M3 snackbar */
 #snack{
   position:fixed;left:16px;right:16px;bottom:calc(var(--safe-b) + 108px);z-index:6;
-  background:var(--s-container-highest);color:var(--on-surface);
+  /* white, not the mint-surface ink: the toast sits on dark grey, where
+     black text was near-illegible after the rebrand */
+  background:var(--s-container-highest);color:#FFFFFF;
   border-radius:8px;padding:14px 16px;font-size:14px;
   box-shadow:0 3px 14px rgba(0,0,0,.5);
   opacity:0;transform:translateY(8px);pointer-events:none;
@@ -298,10 +345,17 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <path d="M57.4971 4.53333L58.2138 0.266667H75L74.2833 4.53333H68.4741L65.9845 19.7714H60.8166L63.3063 4.53333H57.4971Z" fill="currentColor"/>
     </svg>
   </div>
-  <button class="txt-btn" id="btnTune">Camera</button>
+  <div class="top-actions">
+    <button id="btnRoll" hidden aria-label="Open roll">
+      <img id="rollThumb" alt="">
+      <span id="rollBadge">0</span>
+    </button>
+    <button class="icon-btn" id="btnTune" aria-label="Settings"></button>
+  </div>
 </div>
 
 <button id="shutter" aria-label="Capture"></button>
+
 
 <div id="bar">
   <button class="pill" id="btnRate">Rate <span id="rateVal">1</span></button>
@@ -428,12 +482,11 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
 </div>
 
-<!-- export: a centred mint card, not a sheet -->
-<div id="sheetExport" class="card" role="dialog" aria-modal="true" aria-label="Save image">
-  <b class="card-title">Save image</b>
-  <button class="cpill" id="optHD">Standard HD</button>
-  <button class="cpill" id="optAll" hidden>Save all</button>
-  <button class="cpill danger" id="btnDiscard">Discard</button>
+<div id="sheetRoll" class="card roll" role="dialog" aria-modal="true" aria-label="Roll">
+  <b class="card-title">Roll</b>
+  <div id="rollGrid"></div>
+  <button class="cpill" id="rollSave">Save</button>
+  <button class="cpill" id="rollClose">Close</button>
 </div>
 
 <div id="snack" role="status" aria-live="polite"></div>
@@ -460,7 +513,7 @@ const ICON = {
   crop_free:'M120-120v-240h80v160h160v80H120Zm480 0v-80h160v-160h80v240H600ZM120-600v-240h240v80H200v160h-80Zm640 0v-160H600v-80h240v240h-80Z',
 };
 const svg = n => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${ICON[n]}"/></svg>`;
-/* the SLIIIT layout is type-led: no icons in the chrome */
+$('btnTune').innerHTML = svg('tune');   // settings
 
 /* ── canvases ─────────────────────────────────────────────────────── */
 const acc = $('acc'), hud = $('hud'), video = $('vid');
@@ -478,7 +531,7 @@ const RATE = { swipe:200, burst:240, field:200 };   // px/s, fixed per shape
 const src = { el:null, w:0, h:0, kind:null, mirror:false, stream:null, facing:'environment' };
 
 let sweepS = 0, sweepPrev = 0, ringR = 0, ringPrev = 0, fieldD = 0, fieldPrev = 0;
-let passComplete = false, snapshot = null;
+let passComplete = false;
 let last = 0, glow = 0, glowTarget = 0;            // barrel ghosting
 
 /* ── snackbar ─────────────────────────────────────────────────────── */
@@ -1053,10 +1106,6 @@ $('sBlur').addEventListener('input', e => { AA.blur = +e.target.value; aaSyncLab
 
 /* ── loop ─────────────────────────────────────────────────────────── */
 function frame(dt){
-  // Captured: hold the image. Without this the geometry keeps stepping and
-  // the AA engine keeps re-rendering, so the preview drifts away from the
-  // frame you actually took.
-  if (state === 'export') return;
   if (src.kind === 'demo') renderDemo(dt);
   if (!src.el || !W) return;
 
@@ -1065,7 +1114,7 @@ function frame(dt){
   if (aaEligible()){
     // live time-displacement: the whole image re-renders every tick.
     // Export freezes the buffer.
-    if (state !== 'export') aaPush();
+    aaPush();
     stepFor(dt);
     const k = Math.min(devicePixelRatio || 1, 2) * 0.75;   // soft by design
     aaRender(Math.max(2, Math.round(innerWidth*k)), Math.max(2, Math.round(innerHeight*k)));
@@ -1089,9 +1138,10 @@ function frame(dt){
 
 /* One press is one exposure: the shutter starts a pass, the pass ends itself,
    and the frame is captured at that moment — not whenever you happen to tap.
-   The snapshot is held because the AA engine keeps moving underneath. */
+   The canvas is passed along rather than read from state, because the AA
+   engine keeps moving underneath while the PNG encodes. */
 function completePass(){
-  snapshot = exportCanvas();
+  const shot = exportCanvas();
   // exportCanvas resized the GL canvas to 1920x1080 to render the still;
   // put the display render back so the frozen preview is not stretched
   if (aaEligible()){
@@ -1099,8 +1149,8 @@ function completePass(){
     aaRender(Math.max(2, Math.round(innerWidth*k)),
              Math.max(2, Math.round(innerHeight*k)));
   }
-  setState('export');
-  archiveSnapshot();                    // automatic: no tap required
+  archiveSnapshot(shot);                // automatic, then straight back to live
+  setState('idle');
 }
 
 function tick(now){
@@ -1121,23 +1171,18 @@ function syncReadout(){
 function setState(next){
   state = next;
   const sh = $('shutter');
-  if (next !== 'export') closeSheets();   // never leave a stale sheet over a live scan
+  closeSheets();                          // never leave a stale sheet over a live scan
   // the shutter's core is a CSS pseudo-element; injecting an icon here
   // would stack a second circle on top of it
   if (next === 'idle'){
-    snapshot = null;
     sh.style.setProperty('--p','0');
     sh.classList.remove('recording');
     sh.setAttribute('aria-label','Start scan');
     clearAcc();
-  } else if (next === 'scanning'){
+  } else {
     sh.classList.add('recording');
     sh.setAttribute('aria-label','Stop scan');
     clearAcc();
-  } else {
-    sh.classList.remove('recording');
-    sh.setAttribute('aria-label','New scan');
-    openExport();
   }
 }
 
@@ -1201,12 +1246,12 @@ function stamp(){
        + `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-async function archiveSnapshot(){
-  if (!snapshot || !S.autoSave) return;
+async function archiveSnapshot(shot){
+  if (!shot || !S.autoSave) return;
   // read the label BEFORE awaiting — switching shape during the encode
   // would otherwise stamp the next shape's name onto this capture
   const mode = S.mode, at = Date.now(), n = ++seq, when = stamp();
-  const blob = await new Promise(r => snapshot.toBlob(r, 'image/png'));
+  const blob = await new Promise(r => shot.toBlob(r, 'image/png'));
   if (!blob) return;
   const name = `sliiit-${when}-${mode}-${String(n).padStart(3,'0')}.png`;
   try{
@@ -1231,14 +1276,59 @@ async function refreshRoll(){
   rollBytes = all.reduce((n,r) => n + r.size, 0);
   const o = $('oRoll');
   if (o) o.textContent = rollCount ? `${rollCount} \u00B7 ${(rollBytes/1048576).toFixed(0)} MB` : 'empty';
-  const b = $('optAll');
-  if (b){ b.hidden = rollCount < 1; b.textContent = `Save all (${rollCount})`; }
+  const btn = $('btnRoll'), img = $('rollThumb'), badge = $('rollBadge');
+  btn.hidden = rollCount < 1;
+  badge.textContent = rollCount;
+  const newest = all.sort((a,b) => b.at - a.at)[0];
+  if (newest){
+    if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+    const u = URL.createObjectURL(newest.blob);
+    img.dataset.url = u; img.src = u;
+  } else { img.removeAttribute('src'); }
 }
 
-/* one gesture exports the whole roll */
+/* ── roll dialog: thumbs, deselect one by one, save the rest ──────── */
+let rollUrls = [];
+function freeRollUrls(){ rollUrls.forEach(URL.revokeObjectURL); rollUrls = []; }
+
+async function openRoll(){
+  const all = (await rollAll()).sort((a,b) => b.at - a.at);   // newest first
+  const grid = $('rollGrid');
+  freeRollUrls();
+  grid.innerHTML = '';
+  for (const r of all){
+    const url = URL.createObjectURL(r.blob);
+    rollUrls.push(url);
+    const b = document.createElement('button');
+    b.className = 'thumb'; b.type = 'button';
+    b.setAttribute('aria-pressed','true');
+    b.setAttribute('aria-label', r.name);
+    b.dataset.name = r.name;
+    b.innerHTML = `<img src="${url}" alt=""><span class="tick">\u2713</span>`;
+    b.onclick = () => {
+      b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+      syncRollSave();
+    };
+    grid.appendChild(b);
+  }
+  syncRollSave();
+  openSheet('sheetRoll');
+}
+const rollSelected = () =>
+  [...document.querySelectorAll('#rollGrid .thumb[aria-pressed="true"]')].map(b => b.dataset.name);
+function syncRollSave(){
+  const n = rollSelected().length;
+  $('rollSave').textContent = n ? `Save ${n}` : 'Save';
+  $('rollSave').disabled = !n;
+}
+
+/* one gesture exports every selected capture */
 async function saveAll(){
-  const all = (await rollAll()).sort((a,b) => a.at - b.at);
-  if (!all.length) return snack('Roll is empty.', 2000);
+  const pick = new Set(rollSelected());
+  const all = (await rollAll())
+    .filter(r => !pick.size || pick.has(r.name))
+    .sort((a,b) => a.at - b.at);
+  if (!all.length) return snack('Nothing selected.', 2000);
   const files = all.map(r => new File([r.blob], r.name, {type:'image/png'}));
   try{
     if (navigator.canShare && navigator.canShare({files})){
@@ -1255,32 +1345,7 @@ async function saveAll(){
   closeSheets();
 }
 
-function openExport(){
-  $('optHD').textContent = `Save ${W} \u00D7 ${H}`;
-  openSheet('sheetExport');
-}
-$('optHD').addEventListener('click', doSave);
-$('optAll').addEventListener('click', saveAll);
-$('btnDiscard').addEventListener('click', () => { closeSheets(); setState('idle'); });
 
-function doSave(){
-  const c = snapshot || exportCanvas();
-  c.toBlob(async blob => {
-    if (!blob) return snack('Nothing to save.');
-    const file = new File([blob], `slitscan-${c.width}x${c.height}.png`, {type:'image/png'});
-    try{
-      if (navigator.canShare && navigator.canShare({files:[file]})){
-        await navigator.share({files:[file]});
-        closeSheets(); return;
-      }
-    } catch(e){ if (e && e.name === 'AbortError') return; }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    snack(`Saved ${c.width}×${c.height}`);
-    closeSheets();
-  }, 'image/png');
-}
 
 /* ── sheets ───────────────────────────────────────────────────────── */
 function openSheet(id){
@@ -1291,8 +1356,11 @@ function closeSheets(){
   document.querySelectorAll('.sheet, .card').forEach(s => s.classList.remove('on'));
   $('scrim').classList.remove('on');
 }
-$('scrim').addEventListener('click', closeSheets);
+$('scrim').addEventListener('click', () => { closeSheets(); freeRollUrls(); });
 $('btnTune').addEventListener('click', () => openSheet('sheetTune'));
+$('btnRoll').addEventListener('click', openRoll);
+$('rollSave').addEventListener('click', saveAll);
+$('rollClose').addEventListener('click', () => { closeSheets(); freeRollUrls(); });
 $('tuneDone').addEventListener('click', closeSheets);
 $('btnAdvanced').addEventListener('click', e => {
   const open = $('advanced').hidden;
@@ -1598,7 +1666,8 @@ window.__slit2 = {
   useDemo, useCamera, applyMode, exportCanvas,
   get W(){return W}, get H(){return H},
   get sweepS(){return sweepS}, get ringR(){return ringR}, get fieldD(){return fieldD},
-  get passComplete(){return passComplete}, get snapshot(){return snapshot},
+  get passComplete(){return passComplete}, get rollCount(){return rollCount},
+  openRoll, archiveSnapshot, rollAll,
   passProgress, sweepLength, maxRadius, fieldMax, completePass,
   burn(n, dt=1/60){ for(let i=0;i<n;i++) frame(dt); },
 };
