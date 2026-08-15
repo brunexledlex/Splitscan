@@ -400,6 +400,16 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       </div>
     </div>
     <div class="group">
+      <div class="label"><span>Auto-save</span><output id="oRoll">empty</output></div>
+      <div class="seg" id="segAuto" role="group" aria-label="Auto-save">
+        <button data-auto="on" aria-pressed="true">On</button>
+        <button data-auto="off">Off</button>
+      </div>
+      <button class="chip" id="btnClearRoll"
+        style="width:100%;justify-content:center;margin-top:8px">Clear roll</button>
+    </div>
+
+    <div class="group">
       <div class="label"><span>Capture size</span><output id="oCapture"></output></div>
       <div class="seg" id="segCapture" role="group" aria-label="Capture size">
         <button data-capture="screen" aria-pressed="true">Screen</button>
@@ -422,6 +432,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 <div id="sheetExport" class="card" role="dialog" aria-modal="true" aria-label="Save image">
   <b class="card-title">Save image</b>
   <button class="cpill" id="optHD">Standard HD</button>
+  <button class="cpill" id="optAll" hidden>Save all</button>
   <button class="cpill danger" id="btnDiscard">Discard</button>
 </div>
 
@@ -460,7 +471,7 @@ let W = 0, H = 0;                      // accumulation size (viewport aspect)
 let state = 'idle';                    // idle | scanning | export
 
 const S = {
-  mode:'burst', angle:0, slice:1, dir:'right', bandW:0.10, capture:'screen',
+  mode:'burst', angle:0, slice:1, dir:'right', bandW:0.10, capture:'screen', autoSave:true,
   cx:.5, cy:.5, snap:'free', reverse:false, guides:true, manual:false,
 };
 const RATE = { swipe:200, burst:240, field:200 };   // px/s, fixed per shape
@@ -1089,7 +1100,7 @@ function completePass(){
              Math.max(2, Math.round(innerHeight*k)));
   }
   setState('export');
-  snack('Captured \u00B7 ' + S.mode, 1800);
+  archiveSnapshot();                    // automatic: no tap required
 }
 
 function tick(now){
@@ -1145,11 +1156,111 @@ function exportCanvas(){
   return c;
 }
 
+
+/* ── capture roll ─────────────────────────────────────────────────────
+   Every completed pass is archived automatically, with no tap. It lands
+   in IndexedDB, not the photo library: Safari requires a live user
+   gesture for both navigator.share and downloads, so nothing can write
+   to Photos on its own. The roll makes that one gesture cover the whole
+   session instead of every frame.                                      */
+const DB_NAME = 'sliiit', STORE = 'captures';
+const ROLL_MAX = 40, ROLL_BYTES = 250e6;
+let db = null, rollCount = 0, rollBytes = 0, seq = 0;
+
+function idb(){
+  return new Promise((res, rej) => {
+    if (db) return res(db);
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE, {keyPath:'name'});
+    };
+    r.onsuccess = () => { db = r.result; res(db); };
+    r.onerror   = () => rej(r.error);
+  });
+}
+/* The request MUST be issued in the same turn the transaction is opened.
+   Awaiting in between lets IndexedDB auto-commit the empty transaction, and
+   the write is silently dropped — which is exactly what was losing captures. */
+function txReq(mode, fn){
+  return idb().then(d => new Promise((res, rej) => {
+    const t = d.transaction(STORE, mode);
+    const q = fn(t.objectStore(STORE));        // synchronous, same turn
+    q.onsuccess = () => res(q.result);
+    q.onerror   = () => rej(q.error);
+    t.onabort   = () => rej(t.error || new Error('transaction aborted'));
+  }));
+}
+const rollPut = rec  => txReq('readwrite', st => st.put(rec));
+const rollAll = ()   => txReq('readonly',  st => st.getAll()).then(r => r || []);
+const rollDel = name => txReq('readwrite', st => st.delete(name)).catch(() => {});
+
+function stamp(){
+  const d = new Date(), p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-`
+       + `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+async function archiveSnapshot(){
+  if (!snapshot || !S.autoSave) return;
+  // read the label BEFORE awaiting — switching shape during the encode
+  // would otherwise stamp the next shape's name onto this capture
+  const mode = S.mode, at = Date.now(), n = ++seq, when = stamp();
+  const blob = await new Promise(r => snapshot.toBlob(r, 'image/png'));
+  if (!blob) return;
+  const name = `sliiit-${when}-${mode}-${String(n).padStart(3,'0')}.png`;
+  try{
+    await rollPut({ name, blob, at, size: blob.size, mode });
+    await pruneRoll();
+    await refreshRoll();
+    snack('Saved ' + name, 2400);
+  } catch(e){ snack('Could not archive: ' + (e.message||e), 4000); }
+}
+
+async function pruneRoll(){                    // oldest out first
+  const all = (await rollAll()).sort((a,b) => a.at - b.at);
+  let bytes = all.reduce((n,r) => n + r.size, 0);
+  while (all.length > ROLL_MAX || bytes > ROLL_BYTES){
+    const old = all.shift(); if (!old) break;
+    bytes -= old.size; await rollDel(old.name);
+  }
+}
+async function refreshRoll(){
+  const all = await rollAll();
+  rollCount = all.length;
+  rollBytes = all.reduce((n,r) => n + r.size, 0);
+  const o = $('oRoll');
+  if (o) o.textContent = rollCount ? `${rollCount} \u00B7 ${(rollBytes/1048576).toFixed(0)} MB` : 'empty';
+  const b = $('optAll');
+  if (b){ b.hidden = rollCount < 1; b.textContent = `Save all (${rollCount})`; }
+}
+
+/* one gesture exports the whole roll */
+async function saveAll(){
+  const all = (await rollAll()).sort((a,b) => a.at - b.at);
+  if (!all.length) return snack('Roll is empty.', 2000);
+  const files = all.map(r => new File([r.blob], r.name, {type:'image/png'}));
+  try{
+    if (navigator.canShare && navigator.canShare({files})){
+      await navigator.share({files}); closeSheets(); return;
+    }
+  } catch(e){ if (e && e.name === 'AbortError') return; }
+  for (const f of files){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(f); a.download = f.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    await new Promise(r => setTimeout(r, 150));
+  }
+  snack(`Saved ${files.length} images`, 2800);
+  closeSheets();
+}
+
 function openExport(){
   $('optHD').textContent = `Save ${W} \u00D7 ${H}`;
   openSheet('sheetExport');
 }
 $('optHD').addEventListener('click', doSave);
+$('optAll').addEventListener('click', saveAll);
 $('btnDiscard').addEventListener('click', () => { closeSheets(); setState('idle'); });
 
 function doSave(){
@@ -1234,6 +1345,16 @@ $('segGuides').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   S.guides = b.dataset.guides === 'on'; press($('segGuides'),'guides',b.dataset.guides);
 });
+$('segAuto').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.autoSave = b.dataset.auto === 'on';
+  press($('segAuto'),'auto',b.dataset.auto);
+});
+$('btnClearRoll').addEventListener('click', async () => {
+  for (const r of await rollAll()) await rollDel(r.name);
+  await refreshRoll(); snack('Roll cleared', 1600);
+});
+
 $('segCapture').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   S.capture = b.dataset.capture; press($('segCapture'),'capture',S.capture);
@@ -1451,7 +1572,7 @@ addEventListener('resize', () => {
   if (AA.on) { aaAlloc(); aaSyncLabels(); }   // history aspect follows the viewport
 });
 document.addEventListener('visibilitychange', () => { last = 0; });
-applyMode(); setState('idle'); aaSyncLabels(); syncCapture();
+applyMode(); setState('idle'); aaSyncLabels(); syncCapture(); refreshRoll();
 
 /* The live preview is the camera. Demo renders first so there is never a
    black screen, then the camera replaces it. iOS only grants getUserMedia
