@@ -86,45 +86,54 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .icon-btn svg{width:24px;height:24px;fill:currentColor;display:block}
 
 
-/* ── bottom: the mint bar ─────────────────────────────────────────── */
+/* ── bottom: the mint bar ─────────────────────────────────────────────
+   The bar now holds only the mode selector — Rate and Anti-aliasing moved
+   up onto the live preview so the selector can have the full width. Four
+   shapes need the room more than two side buttons need to sit in the bar. */
 #bar{
   position:fixed;left:0;right:0;bottom:0;z-index:3;
   height:calc(var(--bar-h) + var(--safe-b));
   padding:0 15px var(--safe-b);
   background:var(--mint);
-  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  display:flex;align-items:center;justify-content:center;
 }
-.pill{
-  height:35px;border-radius:50px;background:var(--black);color:var(--mint);
-  display:flex;align-items:center;justify-content:center;gap:4px;
-  padding:0 14px;font-size:12px;line-height:15px;white-space:nowrap;flex:0 0 auto;
-}
-/* mode selector: one black pill, active mode gets the grey chip */
+/* mode selector: one black pill, active mode gets the grey chip.
+   Now the bar's only occupant, so it fills the width and each button
+   shares it evenly rather than sizing to its own label. */
 #segMode{
-  /* Figma gap is 19px at 440 wide; clamp so it survives a 375px phone */
-  display:flex;align-items:center;gap:clamp(4px, 4.3vw, 19px);padding:2px;
-  background:var(--black);border-radius:80px;height:39px;flex:0 1 auto;
+  display:flex;align-items:stretch;gap:6px;padding:3px;
+  background:var(--black);border-radius:80px;height:39px;width:100%;
 }
 #segMode button{
+  flex:1 1 0;min-width:0;
   font-size:12px;line-height:15px;color:var(--mint-dim);
-  padding:0 12px;height:35px;border-radius:50px;
+  padding:0 4px;border-radius:50px;
   display:flex;align-items:center;justify-content:center;
   transition:background .15s var(--ease),color .15s var(--ease);
 }
 #segMode button[aria-pressed="true"]{background:var(--chip);color:var(--mint)}
-#btnAA{
-  font-size:12px;line-height:15px;color:var(--black);
-  padding:0 10px;height:35px;border-radius:50px;
-  display:flex;align-items:center;flex:0 0 auto;
+
+/* Rate and Anti-aliasing: floating pills over the image, right above the
+   bar — the same look they had inside it, just no longer sharing its row. */
+.pill{
+  position:fixed;z-index:3;
+  bottom:calc(var(--bar-h) + var(--safe-b) + 12px);
+  height:35px;border-radius:50px;background:var(--black);color:var(--mint);
+  display:flex;align-items:center;justify-content:center;gap:4px;
+  padding:0 14px;font-size:12px;line-height:15px;white-space:nowrap;
+  box-shadow:0 2px 10px rgba(0,0,0,.35);        /* was on solid mint; now on the image */
 }
-#btnAA[aria-pressed="true"]{background:var(--black);color:var(--mint)}
+#btnRate{left:15px}
+/* same on/off language as the mode pills: dim text at rest, the grey chip
+   and bright mint text once it's actually doing something */
+#btnAA{right:15px;color:var(--mint-dim)}
+#btnAA[aria-pressed="true"]{background:var(--chip);color:var(--mint)}
 #btnAA .sm{display:none}
-/* the Figma bar is drawn at 440; below ~420 the full word will not fit
-   beside the mode pill, so the label abbreviates rather than clipping */
+/* the Figma bar was drawn at 440; below ~420 "Anti-aliasing" cannot sit
+   at full width as a floating pill without crowding the shutter */
 @media (max-width:420px){
   #btnAA .lg{display:none}
   #btnAA .sm{display:inline}
-  #segMode{gap:clamp(2px, 3.4vw, 19px)}
 }
 
 /* shutter: mint ring, black core, clear of the bar */
@@ -356,16 +365,19 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <button id="shutter" aria-label="Capture"></button>
 
+<!-- floating over the live preview, right above the bar, so the mode
+     selector below can have the bar to itself -->
+<button class="pill" id="btnRate">Rate <span id="rateVal">1</span></button>
+<button id="btnAA" class="pill" aria-pressed="false" aria-label="Anti-aliasing"><span
+  class="lg">Anti-aliasing</span><span class="sm">AA</span></button>
 
 <div id="bar">
-  <button class="pill" id="btnRate">Rate <span id="rateVal">1</span></button>
   <div id="segMode" role="group" aria-label="Geometry">
     <button data-mode="swipe">Swipe</button>
     <button data-mode="burst" aria-pressed="true">Burst</button>
     <button data-mode="field">Field</button>
+    <button data-mode="strip">Strip</button>
   </div>
-  <button id="btnAA" aria-pressed="false" aria-label="Anti-aliasing"><span
-    class="lg">Anti-aliasing</span><span class="sm">AA</span></button>
 </div>
 
 <div id="scrim"></div>
@@ -392,7 +404,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     </div>
     <p class="hint" id="aaHint" style="margin:8px 0 0">
       Samples a rolling buffer of past frames with sub-pixel and sub-frame
-      interpolation. Radial and Swipe only.
+      interpolation. Not available in Strip — it has no fixed time depth.
     </p>
   </div>
 
@@ -416,7 +428,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
 
 
-  <div class="group">
+  <div class="group" id="grpAngle">
     <div class="label"><span>Angle</span><output id="oAngle">0°</output></div>
     <div class="chips" id="chipsSnap" role="group" aria-label="Angle snap">
       <button class="chip" data-snap="0">0° horizontal</button>
@@ -471,7 +483,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       </div>
     </div>
 
-    <div class="group">
+    <div class="group" id="grpPivot">
       <div class="label"><span>Pivot</span></div>
       <button class="chip" id="btnRecentre" style="width:100%;justify-content:center">Recentre pivot</button>
     </div>
@@ -531,6 +543,7 @@ const RATE = { swipe:200, burst:240, field:200 };   // px/s, fixed per shape
 const src = { el:null, w:0, h:0, kind:null, mirror:false, stream:null, facing:'environment' };
 
 let sweepS = 0, sweepPrev = 0, ringR = 0, ringPrev = 0, fieldD = 0, fieldPrev = 0;
+let stripCv = null, sxc = null, stripX = 0, stripAcc = 0, stripCap = 0;   // Strip's own wide buffer
 let passComplete = false;
 let last = 0, glow = 0, glowTarget = 0;            // barrel ghosting
 
@@ -606,6 +619,8 @@ function clearAcc(){
   sweepS = sweepPrev = S.reverse ?  L/2 : -L/2;
   ringR  = ringPrev  = S.reverse ? maxRadius() : 0;
   fieldD = fieldPrev = S.reverse ? fieldMax()  : 0;
+  stripX = 0; stripAcc = 0;
+  if (stripCv){ sxc.fillStyle = '#000'; sxc.fillRect(0,0,stripCv.width,stripCv.height); }
   passComplete = false;
 }
 
@@ -656,12 +671,14 @@ function paintBand(s0, s1){
 function passProgress(){
   if (S.mode === 'burst'){ const R = maxRadius(); return R ? clamp(ringR/R,0,1) : 0; }
   if (S.mode === 'field'){ const M = fieldMax();  return M ? clamp(fieldD/M,0,1) : 0; }
+  if (S.mode === 'strip'){ return stripCap ? clamp(stripX/stripCap,0,1) : 0; }
   const L = sweepLength(); return L ? clamp((sweepS + L/2)/L, 0, 1) : 0;
 }
 
 function stepFor(dt){
   if      (S.mode === 'burst') stepBurst(dt);
   else if (S.mode === 'field') stepField(dt);
+  else if (S.mode === 'strip') stepStrip(dt);
   else                          stepSwipe(dt);
 }
 
@@ -723,6 +740,72 @@ function stepField(dt){
   paintBand(-w, w);             // the field itself stays live
 }
 
+/* Strip: the slit never moves — it sits at the live frame's right edge —
+   and there is no traversal to complete. Instead the picture keeps
+   GROWING: one column sampled from that fixed edge is appended per frame,
+   the actual photo-finish technique. Unbounded, so it needs its own wide
+   buffer rather than the shared W×H canvas, sized off the same
+   device-resolution ceiling the rest of capture already uses — and it is
+   the one shape anti-aliasing cannot reach, because there is no fixed
+   time depth to sample. */
+function computeStripCap(h){
+  const byArea = Math.floor(MAX_AREA / Math.max(h,1));
+  return clamp(byArea, 1280, MAX_LONG);
+}
+function ensureStrip(){
+  const cap = computeStripCap(H);
+  if (stripCv && stripCv.height === H && stripCap === cap) return;
+  try{
+    const c = document.createElement('canvas');
+    c.width = cap; c.height = H;
+    const g = c.getContext('2d');
+    if (!g) throw new Error('no 2d context');
+    g.fillStyle = '#000'; g.fillRect(0,0,cap,H);
+    // a canvas past the limit allocates fine and then reads back blank —
+    // probe it rather than trust the allocation call
+    g.fillStyle = '#fff'; g.fillRect(cap-2,0,2,2);
+    if (g.getImageData(cap-1,0,1,1).data[0] < 200) throw new Error('too large');
+    stripCv = c; sxc = g; stripCap = cap; stripX = 0; stripAcc = 0;
+  } catch(e){
+    stripCv = null; stripCap = 0;
+    snack('This device can’t allocate a strip buffer.', 5000);
+  }
+}
+function stepStrip(dt){
+  if (state !== 'scanning') return;
+  ensureStrip();
+  if (!stripCv) return;
+  stripAcc += Math.max(S.slice,1);
+  const adv = Math.floor(stripAcc);
+  if (adv >= 1){
+    stripAcc -= adv;
+    if (stripX + adv >= stripCap){
+      passComplete = true;
+    } else {
+      // clip to the new slot, then shift the WHOLE live frame left so its
+      // own right edge lands exactly on that slot — the fixed source column
+      sxc.save();
+      sxc.beginPath(); sxc.rect(stripX, 0, adv, H); sxc.clip();
+      sxc.translate(stripX + adv - W, 0);
+      drawSource(sxc);
+      sxc.restore();
+      stripX += adv;
+    }
+  }
+  presentStrip();
+}
+/* the on-screen view: a right-aligned window into the growing buffer, so
+   the newest sample always sits at the screen's own right edge and older
+   content appears to scroll left — exactly a strip camera's viewfinder */
+function presentStrip(){
+  ax.setTransform(1,0,0,1,0,0);
+  ax.fillStyle = '#000'; ax.fillRect(0,0,W,H);
+  if (!stripCv || !stripX) return;
+  const winW = Math.min(stripX, W);
+  const from = Math.max(0, stripX - winW);
+  ax.drawImage(stripCv, from, 0, winW, H, W-winW, 0, winW, H);
+}
+
 const MINT = '206,253,211';
 
 /* The lime line IS the slit — it marks where the scan is reading right now,
@@ -752,6 +835,10 @@ function drawSlit(){
     hx.globalAlpha = .5; hx.lineWidth = px4/2;   // the band edges
     line(w); line(-w);
     hx.globalAlpha = 1; hx.lineWidth = px4;
+
+  } else if (S.mode === 'strip'){
+    const x = W - px4/2;                       // fixed — it never moves
+    hx.beginPath(); hx.moveTo(x,0); hx.lineTo(x,H); hx.stroke();
 
   } else {
     const th = S.angle*DEG, nx=-Math.sin(th), ny=Math.cos(th);
@@ -800,6 +887,14 @@ function drawHud(){
       hx.fillStyle = 'rgba(0,0,0,.85)';
       hx.beginPath(); hx.arc(h.x,h.y,3.5*u,0,TAU); hx.fill();
     }
+
+  } else if (S.mode === 'strip'){              // how much of the buffer is used
+    const frac = stripCap ? clamp(stripX/stripCap,0,1) : 0;
+    const y = H - 3*u;
+    hx.strokeStyle = `rgba(${MINT},${.22*a})`;
+    hx.beginPath(); hx.moveTo(0,y); hx.lineTo(W,y); hx.stroke();
+    hx.strokeStyle = `rgba(${MINT},${.85*Math.max(a,.5)})`;
+    hx.beginPath(); hx.moveTo(0,y); hx.lineTo(W*frac,y); hx.stroke();
 
   } else {                                     // the travel track
     const th = S.angle*DEG, nx=-Math.sin(th), ny=Math.cos(th);
@@ -1055,7 +1150,10 @@ function aaRender(outW, outH){
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
 
-const aaEligible = () => AA.on && !AA.lost && AA.gl && AA.tex;
+// Strip has no fixed time depth to sample — it grows without bound, so it
+// is the one shape the WebGL engine can never reach, regardless of the
+// toggle's own state.
+const aaEligible = () => AA.on && !AA.lost && AA.gl && AA.tex && S.mode !== 'strip';
 
 function aaSetOn(on){
   AA.on = on;
@@ -1088,7 +1186,7 @@ function aaSyncLabels(){
 $('segAA').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.aa === 'on' && S.mode === 'strip'){
-    snack('Split has no fixed time depth — use Radial or Swipe.', 4000); return;
+    snack('Strip has no fixed time depth — use Swipe, Burst or Field.', 4000); return;
   }
   aaSetOn(b.dataset.aa === 'on');
 });
@@ -1188,6 +1286,15 @@ function setState(next){
 
 /* ── export ───────────────────────────────────────────────────────── */
 function exportCanvas(){
+  // Strip's picture is the WHOLE grown buffer, not the one-screen-wide
+  // window the viewport happens to be showing — that is the entire point
+  // of a photo-finish strip: it can be longer than any one frame.
+  if (S.mode === 'strip' && stripCv && stripX > 0){
+    const c = document.createElement('canvas');
+    c.width = stripX; c.height = H;
+    c.getContext('2d').drawImage(stripCv, 0,0, stripX,H, 0,0, stripX,H);
+    return c;
+  }
   const c = document.createElement('canvas');
   c.width = W; c.height = H;                  // the full frame, no crop
   const g = c.getContext('2d');
@@ -1380,6 +1487,7 @@ $('shutter').addEventListener('click', () => {
 $('segMode').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   S.mode = b.dataset.mode; applyMode();
+  if (S.mode === 'strip' && AA.on) snack('Anti-aliasing is unavailable in Strip.', 2200);
 });
 $('segSlice').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -1441,9 +1549,13 @@ function applyMode(){
   if (typeof aaEligible === 'function'){
     $('gl').hidden = !aaEligible(); $('acc').hidden = !!aaEligible();
   }
-  $('lSlice').textContent = S.mode==='burst' ? 'Ring' : S.mode==='field' ? 'Edge' : 'Slit';
+  $('lSlice').textContent =
+    S.mode==='burst' ? 'Ring' : S.mode==='field' ? 'Edge' : S.mode==='strip' ? 'Feed' : 'Slit';
   $('sSlice').max = 60;
   setSlice(clamp(S.slice, 1, +$('sSlice').max));
+  // neither concept applies to a slit that never moves and has no pivot
+  $('grpAngle').hidden = S.mode === 'strip';
+  $('grpPivot').hidden = S.mode === 'strip';
   clearAcc();
 }
 
@@ -1480,6 +1592,7 @@ function setDir(dir, announce){
 
 function applySwipe(drag){
   if (S.mode === 'swipe') return setDir(SWIPE_OPPOSITE[drag], true);
+  if (S.mode === 'strip') return snack('Strip is fixed at the right edge.', 1500);
 
   if (S.mode === 'burst'){
     S.reverse = (drag === 'down');
@@ -1676,6 +1789,7 @@ window.__slit2 = {
   useDemo, useCamera, applyMode, exportCanvas,
   get W(){return W}, get H(){return H},
   get sweepS(){return sweepS}, get ringR(){return ringR}, get fieldD(){return fieldD},
+  get stripX(){return stripX}, get stripCap(){return stripCap},
   get passComplete(){return passComplete}, get rollCount(){return rollCount},
   openRoll, archiveSnapshot, rollAll,
   passProgress, sweepLength, maxRadius, fieldMax, completePass,
