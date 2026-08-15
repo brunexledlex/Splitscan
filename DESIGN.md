@@ -3,6 +3,63 @@
 Why the app looks and behaves the way it does. This is the part of the project
 I actually cared about.
 
+Design and direction by [Bruno Silva](https://ditongo.com) / [Ditongo](https://ditongo.com).
+
+---
+
+## v2 — SLIIIT
+
+The app was rebuilt against a Figma spec partway through, and the identity
+changed with it: bituminous-black ground, a single mint accent (`#CEFDD3`),
+Inter at 12/15, pill geometry throughout. The full rationale for each feature
+is written up as it was built, before the code — read these in order for the
+actual design process:
+
+1. [docs/v2-spec.md](docs/v2-spec.md) — the immersive capture UI: full-bleed
+   viewport, the ghosted-bezel instrument, moving commands off a bottom bar
+   and onto the image itself.
+2. [docs/slit-shapes-spec.md](docs/slit-shapes-spec.md) — Burst and Field, and
+   the realisation that every slit is one scalar time-field with a different
+   distance function, which is what let two very different-looking effects
+   share a single engine.
+3. [docs/aa-engine-spec.md](docs/aa-engine-spec.md) — the WebGL anti-aliasing
+   engine: why it needs a second renderer entirely, and the memory budget that
+   makes "600 frames of history" a real constraint on a phone rather than a
+   slider label.
+
+A few decisions worth pulling out here rather than leaving buried in those specs:
+
+**The lime line is the slit, not a decoration around it.** Early builds drew a
+static mint rule down the screen edge as a brand mark; it now marks exactly
+where the scan is reading, in every state, because a camera's one indispensable
+piece of chrome is knowing where the exposure is happening.
+
+**Capture doesn't ask.** The old flow was tap shutter → dialog → pick a format
+→ tap again. It's now tap once, the pass runs itself, the frame archives
+itself under a unique name, and the feed returns — because a four-to-ten-second
+exposure is already a commitment; asking again afterwards just makes you wait
+twice.
+
+**The roll exists because Safari won't let anything else.** `navigator.share`
+and downloads both require live user activation, and a pass is well past that
+window by the time it finishes. No web app can silently write to the photo
+library — that's an iOS rule, not a gap in this one — so the roll is the
+next-best thing: one gesture, at the end of a session, covers everything shot
+during it.
+
+**Capture resolution follows the device.** The Figma brief specified a fixed
+1920×1080 export; on a portrait phone that cropped roughly three-quarters of
+the picture away. There was no reason for the fixed size once it was checked
+against an actual device aspect, so capture now matches the screen.
+
+---
+
+## v1 — the original prototype
+
+What follows describes `index.html`, the darkroom-instrument identity the
+project started with, kept here as the historical record rather than rewritten
+to match the rebrand.
+
 ## The brief I set myself
 
 A slit-scan app is usually presented as a filter: sliders, a preview, an Apply
