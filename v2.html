@@ -225,8 +225,9 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   max-height:min(78dvh,640px);
 }
 .card.roll.on{transform:translate(-50%,-50%) scale(1)}
+/* a plain mosaic — four square thumbs per row, no overlap, no stacking */
 #rollGrid{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%;
+  display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;
   max-height:min(52dvh,420px);overflow-y:auto;overscroll-behavior:contain;
   -webkit-overflow-scrolling:touch;
 }
@@ -235,19 +236,32 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   font-size:12px;color:rgba(0,0,0,.55);padding:18px 0;
 }
 .thumb{
-  position:relative;aspect-ratio:9/16;border-radius:10px;overflow:hidden;
-  background:var(--black);border:2px solid var(--black);
-  transition:opacity .12s var(--ease);
+  position:relative;aspect-ratio:1/1;border-radius:8px;overflow:hidden;
+  background:var(--black);
 }
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.thumb[aria-pressed="false"]{opacity:.3;border-color:transparent}
+/* selection now means "marked for deletion" — a red wash, not a dim-out,
+   because you want to see exactly what you're about to lose */
+.thumb::after{
+  content:'';position:absolute;inset:0;background:var(--danger);opacity:0;
+  transition:opacity .12s var(--ease);
+}
+.thumb[aria-pressed="true"]::after{opacity:.45}
 .thumb .tick{
   position:absolute;right:4px;top:4px;width:17px;height:17px;border-radius:50%;
-  background:var(--mint);color:var(--black);font-size:11px;line-height:17px;
-  text-align:center;font-weight:700;
+  background:rgba(255,255,255,.35);color:transparent;font-size:11px;line-height:17px;
+  text-align:center;font-weight:700;transition:background .12s var(--ease),color .12s var(--ease);
 }
-.thumb[aria-pressed="false"] .tick{background:rgba(255,255,255,.25);color:transparent}
+.thumb[aria-pressed="true"] .tick{background:var(--danger);color:#fff}
 .cpill:disabled{opacity:.4}
+
+/* header row: title + the dismiss-only close, top of the card */
+.roll-head{display:flex;align-items:center;justify-content:space-between;align-self:stretch}
+.roll-x{
+  width:26px;height:26px;border-radius:50%;flex:0 0 auto;
+  display:grid;place-items:center;background:rgba(0,0,0,.08);color:var(--black);
+}
+.roll-x svg{width:16px;height:16px;fill:currentColor}
 
 /* ── export card (Figma Frame 8): mint, centred, three pills ──────── */
 .card{
@@ -495,10 +509,13 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 </div>
 
 <div id="sheetRoll" class="card roll" role="dialog" aria-modal="true" aria-label="Roll">
-  <b class="card-title">Roll</b>
+  <div class="roll-head">
+    <b class="card-title" style="align-self:auto">Roll</b>
+    <button id="rollX" class="roll-x" aria-label="Close"></button>
+  </div>
   <div id="rollGrid"></div>
   <button class="cpill" id="rollSave">Save</button>
-  <button class="cpill" id="rollClose">Close</button>
+  <button class="cpill danger" id="rollDelete" disabled>Delete</button>
 </div>
 
 <div id="snack" role="status" aria-live="polite"></div>
@@ -523,9 +540,11 @@ const ICON = {
   photo_camera:'M480-260q75 0 127.5-52.5T660-440q0-75-52.5-127.5T480-620q-75 0-127.5 52.5T300-440q0 75 52.5 127.5T480-260Zm0-80q-42 0-71-29t-29-71q0-42 29-71t71-29q42 0 71 29t29 71q0 42-29 71t-71 29ZM80-120v-640h206l74-80h240l74 80h206v640H80Zm80-80h640v-480H638l-73-80H395l-73 80H160v480Zm320-240Z',
   aspect_ratio:'M560-280h200v-200h-80v120H560v80ZM200-480h80v-120h120v-80H200v200ZM80-160v-640h800v640H80Zm80-80h640v-480H160v480Zm0 0v-480 480Z',
   crop_free:'M120-120v-240h80v160h160v80H120Zm480 0v-80h160v-160h80v240H600ZM120-600v-240h240v80H200v160h-80Zm640 0v-160H600v-80h240v240h-80Z',
+  close:'m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z',
 };
 const svg = n => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${ICON[n]}"/></svg>`;
 $('btnTune').innerHTML = svg('tune');   // settings
+$('rollX').innerHTML = svg('close');    // dismiss the roll, no side effects
 
 /* ── canvases ─────────────────────────────────────────────────────── */
 const acc = $('acc'), hud = $('hud'), video = $('vid');
@@ -1394,7 +1413,12 @@ async function refreshRoll(){
   } else { img.removeAttribute('src'); }
 }
 
-/* ── roll dialog: thumbs, deselect one by one, save the rest ──────── */
+/* ── roll dialog: a plain mosaic, select to mark for deletion ─────────
+   Selection here means one thing only — "delete this" — so thumbs start
+   UNSELECTED (nothing is destroyed by default) and the live count lands on
+   the Delete button, not Save. Save always exports the whole roll: the two
+   actions no longer share one selection state, which is what let the old
+   version's Save silently exclude whatever you had just marked for deletion. */
 let rollUrls = [];
 function freeRollUrls(){ rollUrls.forEach(URL.revokeObjectURL); rollUrls = []; }
 
@@ -1408,38 +1432,36 @@ async function openRoll(){
     rollUrls.push(url);
     const b = document.createElement('button');
     b.className = 'thumb'; b.type = 'button';
-    b.setAttribute('aria-pressed','true');
+    b.setAttribute('aria-pressed','false');
     b.setAttribute('aria-label', r.name);
     b.dataset.name = r.name;
     b.innerHTML = `<img src="${url}" alt=""><span class="tick">\u2713</span>`;
     b.onclick = () => {
       b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
-      syncRollSave();
+      syncRollActions();
     };
     grid.appendChild(b);
   }
-  syncRollSave();
+  $('rollSave').disabled = all.length === 0;
+  syncRollActions();
   openSheet('sheetRoll');
 }
 const rollSelected = () =>
   [...document.querySelectorAll('#rollGrid .thumb[aria-pressed="true"]')].map(b => b.dataset.name);
-function syncRollSave(){
+function syncRollActions(){
   const n = rollSelected().length;
-  $('rollSave').textContent = n ? `Save ${n}` : 'Save';
-  $('rollSave').disabled = !n;
+  $('rollDelete').textContent = n ? `Delete ${n}` : 'Delete';
+  $('rollDelete').disabled = !n;
 }
 
-/* one gesture exports every selected capture */
+/* one gesture exports the entire roll, regardless of selection */
 async function saveAll(){
-  const pick = new Set(rollSelected());
-  const all = (await rollAll())
-    .filter(r => !pick.size || pick.has(r.name))
-    .sort((a,b) => a.at - b.at);
-  if (!all.length) return snack('Nothing selected.', 2000);
+  const all = (await rollAll()).sort((a,b) => a.at - b.at);
+  if (!all.length) return snack('Roll is empty.', 2000);
   const files = all.map(r => new File([r.blob], r.name, {type:'image/png'}));
   try{
     if (navigator.canShare && navigator.canShare({files})){
-      await navigator.share({files}); closeSheets(); return;
+      await navigator.share({files}); closeSheets(); freeRollUrls(); return;
     }
   } catch(e){ if (e && e.name === 'AbortError') return; }
   for (const f of files){
@@ -1449,7 +1471,18 @@ async function saveAll(){
     await new Promise(r => setTimeout(r, 150));
   }
   snack(`Saved ${files.length} images`, 2800);
-  closeSheets();
+  closeSheets(); freeRollUrls();
+}
+
+/* delete every marked capture, then redraw the grid in place — the dialog
+   stays open, since you may want to mark and delete another batch right after */
+async function performRollDelete(){
+  const names = rollSelected();
+  if (!names.length) return;
+  for (const name of names) await rollDel(name);
+  await refreshRoll();
+  await openRoll();
+  snack(`Deleted ${names.length}`, 1800);
 }
 
 
@@ -1467,7 +1500,8 @@ $('scrim').addEventListener('click', () => { closeSheets(); freeRollUrls(); });
 $('btnTune').addEventListener('click', () => openSheet('sheetTune'));
 $('btnRoll').addEventListener('click', openRoll);
 $('rollSave').addEventListener('click', saveAll);
-$('rollClose').addEventListener('click', () => { closeSheets(); freeRollUrls(); });
+$('rollDelete').addEventListener('click', performRollDelete);
+$('rollX').addEventListener('click', () => { closeSheets(); freeRollUrls(); });
 $('tuneDone').addEventListener('click', closeSheets);
 $('btnAdvanced').addEventListener('click', e => {
   const open = $('advanced').hidden;
