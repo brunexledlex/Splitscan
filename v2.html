@@ -1635,6 +1635,16 @@ async function useFile(f){
 }
 
 /* ── boot ─────────────────────────────────────────────────────────── */
+// offline shell, so the installed app opens with no server and no network.
+// Explicit here rather than inherited from index.html's registration: this
+// page had none of its own, so opening it directly (e.g. a Home Screen icon
+// pointed straight at v2.html, with index.html never visited) got no offline
+// support and no update path at all. Same ?v= cache-buster as index.html —
+// see sw.js for why a bare './sw.js' can look unchanged for 10 minutes on
+// GitHub Pages even right after a real deploy.
+if ('serviceWorker' in navigator && window.isSecureContext){
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=4').catch(() => {}));
+}
 addEventListener('resize', () => {
   resize(); syncCapture();
   if (AA.on) { aaAlloc(); aaSyncLabels(); }   // history aspect follows the viewport

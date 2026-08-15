@@ -4,8 +4,16 @@
    first version it ever saw, so a rebuilt page never reaches the phone.
      · the page itself  → network-first, cache fallback  (updates land,
                           and it still opens with no network at all)
-     · icons / manifest → cache-first                    (they don't change) */
-const CACHE = 'slitscan-v3';
+     · icons / manifest → cache-first                    (they don't change)
+
+   GitHub Pages serves EVERYTHING with `Cache-Control: max-age=600` — it has
+   no way to say "always revalidate" for sw.js or the pages. That means the
+   plain `fetch(req)` below was being satisfied by the browser's own 10-minute
+   HTTP cache, not a real network hit: "network-first" was actually
+   "whatever's-in-the-HTTP-cache-for-10-minutes-first". `{cache:'no-store'}`
+   is what actually forces a live request. See registration in v2.html/
+   index.html for the matching fix on the sw.js file itself. */
+const CACHE = 'slitscan-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -19,7 +27,9 @@ const ASSETS = [
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
-      .then(c => c.addAll(ASSETS))
+      // 'reload' for the same reason as above: addAll's default fetch would
+      // happily accept a stale copy straight out of the 10-minute HTTP cache
+      .then(c => c.addAll(ASSETS.map(u => new Request(u, {cache: 'reload'}))))
       .then(() => self.skipWaiting())
   );
 });
@@ -42,7 +52,7 @@ self.addEventListener('fetch', e => {
 
   if (isPage(req)){
     e.respondWith(
-      fetch(req)
+      fetch(req, {cache: 'no-store'})   // bypass the HTTP cache, not just this worker's
         .then(res => {
           // cache under the page's OWN url — keying every navigation to
           // index.html made visiting v2.html overwrite the offline v1

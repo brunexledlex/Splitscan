@@ -875,9 +875,14 @@ addEventListener('keydown', e => {
 });
 
 /* ── boot ─────────────────────────────────────────────────────────── */
-// offline shell, so the installed app opens with no server and no network
+// offline shell, so the installed app opens with no server and no network.
+// GitHub Pages sends max-age=600 on every file including sw.js itself, so a
+// bare './sw.js' can be satisfied from the phone's own HTTP cache for up to
+// 10 minutes and look byte-identical even after a real deploy. The ?v= query
+// is a different cache key each release, forcing a genuine fetch. Bump it
+// whenever sw.js changes — it must match the CACHE constant inside sw.js.
 if ('serviceWorker' in navigator && window.isSecureContext){
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=4').catch(() => {}));
 }
 document.addEventListener('visibilitychange', () => { last = 0; });
 applyMode();
