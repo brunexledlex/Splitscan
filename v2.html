@@ -126,12 +126,17 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 }
 
 /* shutter: mint ring, black core, clear of the bar */
+/* the ring doubles as the pass progress meter — you are waiting for it now */
 #shutter{
   position:fixed;left:50%;transform:translateX(-50%);
   bottom:calc(var(--bar-h) + var(--safe-b) + 28px);z-index:3;
   width:63px;height:63px;border-radius:50%;
   background:var(--mint);display:grid;place-items:center;
   transition:transform .12s var(--ease);
+}
+#shutter.recording{
+  background:conic-gradient(var(--mint) calc(var(--p,0) * 1turn),
+                            rgba(206,253,211,.26) 0);
 }
 #shutter::after{
   content:'';width:33px;height:33px;border-radius:50%;background:var(--black);
@@ -454,6 +459,7 @@ const RATE = { swipe:200, burst:240, field:200 };   // px/s, fixed per shape
 const src = { el:null, w:0, h:0, kind:null, mirror:false, stream:null, facing:'environment' };
 
 let sweepS = 0, sweepPrev = 0, ringR = 0, ringPrev = 0, fieldD = 0, fieldPrev = 0;
+let passComplete = false, snapshot = null;
 let last = 0, glow = 0, glowTarget = 0;            // barrel ghosting
 
 /* ── snackbar ─────────────────────────────────────────────────────── */
@@ -493,10 +499,14 @@ function renderDemo(dt){
    Full-bleed with no display crop — what you see is exactly the buffer.
    Only the HD export crops, and the HUD shows that crop.              */
 function resize(){
-  const vw = innerWidth, vh = innerHeight;
+  // a zero viewport happens transiently on iOS during rotation and in
+  // background tabs; 1920/0 is Infinity and would poison W/H with NaN
+  const vw = innerWidth || document.documentElement.clientWidth || 0;
+  const vh = innerHeight || document.documentElement.clientHeight || 0;
+  if (vw < 2 || vh < 2) return;
   const s = 1920 / Math.max(vw, vh);
   const nw = Math.round(vw*s), nh = Math.round(vh*s);
-  if (nw === W && nh === H) return;
+  if (!nw || !nh || nw === W && nh === H) return;
   W = nw; H = nh;
   acc.width = hud.width = W; acc.height = hud.height = H;
   clearAcc();
@@ -504,9 +514,11 @@ function resize(){
 function clearAcc(){
   ax.setTransform(1,0,0,1,0,0);
   ax.fillStyle = '#000'; ax.fillRect(0,0,W,H);
-  sweepS = sweepPrev = -sweepLength()/2;
-  ringR = ringPrev = 0;
-  fieldD = fieldPrev = 0;
+  const L = sweepLength();
+  sweepS = sweepPrev = S.reverse ?  L/2 : -L/2;
+  ringR  = ringPrev  = S.reverse ? maxRadius() : 0;
+  fieldD = fieldPrev = S.reverse ? fieldMax()  : 0;
+  passComplete = false;
 }
 
 function drawSource(ctx){
@@ -553,6 +565,12 @@ function paintBand(s0, s1){
   drawSource(ax); ax.restore();
 }
 
+function passProgress(){
+  if (S.mode === 'burst'){ const R = maxRadius(); return R ? clamp(ringR/R,0,1) : 0; }
+  if (S.mode === 'field'){ const M = fieldMax();  return M ? clamp(fieldD/M,0,1) : 0; }
+  const L = sweepLength(); return L ? clamp((sweepS + L/2)/L, 0, 1) : 0;
+}
+
 function stepFor(dt){
   if      (S.mode === 'burst') stepBurst(dt);
   else if (S.mode === 'field') stepField(dt);
@@ -563,8 +581,10 @@ function stepSwipe(dt){
   const L = sweepLength();
   sweepPrev = sweepS;
   sweepS += dir() * RATE.swipe * dt;
-  if (sweepS >  L/2){ sweepS = -L/2; sweepPrev = -L/2; }
-  if (sweepS < -L/2){ sweepS =  L/2; sweepPrev =  L/2; }
+  if (sweepS >  L/2){ if (state==='scanning'){ sweepS =  L/2; passComplete = true; }
+                      else { sweepS = -L/2; sweepPrev = -L/2; } }
+  if (sweepS < -L/2){ if (state==='scanning'){ sweepS = -L/2; passComplete = true; }
+                      else { sweepS =  L/2; sweepPrev =  L/2; } }
   if (state !== 'scanning') return;
   let lo = Math.min(sweepPrev,sweepS), hi = Math.max(sweepPrev,sweepS);
   const minW = Math.max(S.slice,1);
@@ -578,8 +598,10 @@ function stepBurst(dt){
   const R = maxRadius();
   ringPrev = ringR;
   ringR += dir() * RATE.burst * dt;
-  if (ringR > R){ ringR = 0; ringPrev = 0; }
-  if (ringR < 0){ ringR = R; ringPrev = R; }
+  if (ringR > R){ if (state==='scanning'){ ringR = R; passComplete = true; }
+                  else { ringR = 0; ringPrev = 0; } }
+  if (ringR < 0){ if (state==='scanning'){ ringR = 0; passComplete = true; }
+                  else { ringR = R; ringPrev = R; } }
   if (state !== 'scanning') return;
   let r0 = Math.min(ringPrev,ringR), r1 = Math.max(ringPrev,ringR);
   const minW = Math.max(S.slice,1);
@@ -599,8 +621,10 @@ function stepField(dt){
   const w = bandHalf(), M = fieldMax();
   fieldPrev = fieldD;
   fieldD += dir() * RATE.field * dt;
-  if (fieldD > M){ fieldD = 0; fieldPrev = 0; }
-  if (fieldD < 0){ fieldD = M; fieldPrev = M; }
+  if (fieldD > M){ if (state==='scanning'){ fieldD = M; passComplete = true; }
+                   else { fieldD = 0; fieldPrev = 0; } }
+  if (fieldD < 0){ if (state==='scanning'){ fieldD = 0; passComplete = true; }
+                   else { fieldD = M; fieldPrev = M; } }
   if (state !== 'scanning') return;
   let d0 = Math.min(fieldPrev,fieldD), d1 = Math.max(fieldPrev,fieldD);
   const minW = Math.max(S.slice,1);
@@ -1009,25 +1033,38 @@ function frame(dt){
 
   if (aaEligible()){
     // live time-displacement: the whole image re-renders every tick.
-    // Export freezes the buffer, which is what Hold means here.
+    // Export freezes the buffer.
     if (state !== 'export') aaPush();
     stepFor(dt);
     const k = Math.min(devicePixelRatio || 1, 2) * 0.75;   // soft by design
     aaRender(Math.max(2, Math.round(innerWidth*k)), Math.max(2, Math.round(innerHeight*k)));
-    drawHud(); syncReadout();
-    return;
+  } else {
+    if (state === 'idle'){
+      ax.setTransform(1,0,0,1,0,0);
+      drawSource(ax);                     // live preview, nothing accumulating
+    }
+    stepFor(dt);
   }
 
-  if (state === 'idle'){
-    ax.setTransform(1,0,0,1,0,0);
-    drawSource(ax);                       // live preview, nothing accumulating
-    stepFor(dt);
-  } else {
-    stepFor(dt);
-  }
   drawHud();
   syncReadout();
+
+  // one exit point, so the pass ends the same way in both engines
+  if (state === 'scanning'){
+    $('shutter').style.setProperty('--p', passProgress().toFixed(3));
+    if (passComplete){ passComplete = false; completePass(); }
+  }
 }
+
+/* One press is one exposure: the shutter starts a pass, the pass ends itself,
+   and the frame is captured at that moment — not whenever you happen to tap.
+   The snapshot is held because the AA engine keeps moving underneath. */
+function completePass(){
+  snapshot = exportCanvas();
+  setState('export');
+  snack('Captured \u00B7 ' + S.mode, 1800);
+}
+
 function tick(now){
   requestAnimationFrame(tick);
   const dt = last ? Math.min((now-last)/1000, .1) : 0;
@@ -1050,6 +1087,8 @@ function setState(next){
   // the shutter's core is a CSS pseudo-element; injecting an icon here
   // would stack a second circle on top of it
   if (next === 'idle'){
+    snapshot = null;
+    sh.style.setProperty('--p','0');
     sh.classList.remove('recording');
     sh.setAttribute('aria-label','Start scan');
     clearAcc();
@@ -1086,7 +1125,7 @@ $('optHD').addEventListener('click', doSave);
 $('btnDiscard').addEventListener('click', () => { closeSheets(); setState('idle'); });
 
 function doSave(){
-  const c = exportCanvas();
+  const c = snapshot || exportCanvas();
   c.toBlob(async blob => {
     if (!blob) return snack('Nothing to save.');
     const file = new File([blob], `slitscan-${c.width}x${c.height}.png`, {type:'image/png'});
@@ -1127,10 +1166,7 @@ const press = (g, attr, val) =>
   [...g.children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === String(val))));
 
 $('shutter').addEventListener('click', () => {
-  if (state === 'scanning') return setState('export');
-  // the AA engine is always live, so there is nothing to accumulate —
-  // the shutter is a capture, not a start
-  if (aaEligible()) return setState('export');
+  if (state === 'scanning'){ completePass(); return; }   // cut the pass short
   setState('scanning');
 });
 
@@ -1402,6 +1438,9 @@ window.__slit2 = {
   S, acc, hud, src, get state(){return state}, setState, resize, clearAcc,
   useDemo, useCamera, applyMode, exportCanvas,
   get W(){return W}, get H(){return H},
+  get sweepS(){return sweepS}, get ringR(){return ringR}, get fieldD(){return fieldD},
+  get passComplete(){return passComplete}, get snapshot(){return snapshot},
+  passProgress, sweepLength, maxRadius, fieldMax, completePass,
   burn(n, dt=1/60){ for(let i=0;i<n;i++) frame(dt); },
 };
 })();
