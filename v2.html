@@ -442,17 +442,6 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
 
 
-  <div class="group" id="grpAngle">
-    <div class="label"><span>Angle</span><output id="oAngle">0°</output></div>
-    <div class="chips" id="chipsSnap" role="group" aria-label="Angle snap">
-      <button class="chip" data-snap="0">0° horizontal</button>
-      <button class="chip" data-snap="45">45°</button>
-      <button class="chip" data-snap="90">90° vertical</button>
-      <button class="chip" data-snap="free" aria-pressed="true">Free</button>
-      <button class="chip" id="chipReverse">Reverse</button>
-    </div>
-  </div>
-
   <div class="group">
     <div class="label"><span id="lSlice">Slice</span><output id="oSlice">2 px</output></div>
     <div class="seg" id="segSlice" role="group" aria-label="Slice thickness">
@@ -556,7 +545,7 @@ let state = 'idle';                    // idle | scanning | export
 
 const S = {
   mode:'burst', angle:0, slice:1, dir:'right', bandW:0.10, capture:'screen', autoSave:true,
-  cx:.5, cy:.5, snap:'free', reverse:false, guides:true, manual:false,
+  cx:.5, cy:.5, reverse:false, guides:true, manual:false,
 };
 const RATE = { swipe:200, burst:240, field:200 };   // px/s, fixed per shape
 const src = { el:null, w:0, h:0, kind:null, mirror:false, stream:null, facing:'environment' };
@@ -1244,7 +1233,6 @@ function frame(dt){
   }
 
   drawHud();
-  syncReadout();
 
   // one exit point, so the pass ends the same way in both engines
   if (state === 'scanning'){
@@ -1275,13 +1263,6 @@ function tick(now){
   const dt = last ? Math.min((now-last)/1000, .1) : 0;
   last = now;
   frame(dt);
-}
-
-function syncReadout(){
-  // no on-screen readout any more — the angle lives in the settings sheet
-  if (S.manual) return;
-  const aDeg = S.angle;
-  $('oAngle').textContent = aDeg.toFixed(0) + '°';
 }
 
 /* ── state machine ────────────────────────────────────────────────── */
@@ -1536,21 +1517,6 @@ function setSlice(v){
   $('oSliceFine').textContent = S.slice;
   $('rateVal').textContent = S.slice;          // the bar pill
 }
-$('chipsSnap').addEventListener('click', e => {
-  const b = e.target.closest('button[data-snap]'); if (!b) return;
-  S.snap = b.dataset.snap;
-  [...$('chipsSnap').querySelectorAll('[data-snap]')]
-    .forEach(c => c.setAttribute('aria-pressed', String(c.dataset.snap === S.snap)));
-  if (S.snap !== 'free'){
-    S.angle = +S.snap; S.manual = true;
-    $('oAngle').textContent = S.angle+'°';
-  } else S.manual = false;
-});
-$('chipReverse').addEventListener('click', e => {
-  S.reverse = !S.reverse;
-  e.currentTarget.setAttribute('aria-pressed', String(S.reverse));
-  snack(S.reverse ? 'Reversed' : 'Forward', 1200);
-});
 $('segGuides').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   S.guides = b.dataset.guides === 'on'; press($('segGuides'),'guides',b.dataset.guides);
@@ -1587,8 +1553,7 @@ function applyMode(){
     S.mode==='burst' ? 'Ring' : S.mode==='field' ? 'Edge' : S.mode==='strip' ? 'Feed' : 'Slit';
   $('sSlice').max = 60;
   setSlice(clamp(S.slice, 1, +$('sSlice').max));
-  // neither concept applies to a slit that never moves and has no pivot
-  $('grpAngle').hidden = S.mode === 'strip';
+  // Strip has no centre to grab; the other three shapes still get one
   $('grpPivot').hidden = S.mode === 'strip';
   clearAcc();
 }
@@ -1619,7 +1584,6 @@ function setDir(dir, announce){
     S.angle = EDGE_POINT[dir];
   }
   S.manual = false;
-  $('oAngle').textContent = S.angle.toFixed(0) + '\u00B0';
   clearAcc();
   if (announce) snack('Slit from ' + dir, 1300);
 }
@@ -1661,7 +1625,6 @@ function moveHandle(ev, which){
   if (len < 6) return;
   S.angle = ((Math.atan2(vy,vx)/DEG - 90) % 360 + 360) % 360;
   S.bandW = clamp(len / Math.min(W,H), BAND_MIN, BAND_MAX);
-  $('oAngle').textContent = S.angle.toFixed(0) + '\u00B0';
 }
 
 let dragStart = null, grabbed = -1;
