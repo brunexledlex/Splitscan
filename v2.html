@@ -231,15 +231,16 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
    Black ground (its own thumbnails carry all the colour), full-width frames
    stacked in one scrolling column. */
 .card.roll{
-  left:50%;top:0;bottom:0;height:100dvh;
+  left:50%;top:32px;bottom:32px;height:auto;   /* clear of the screen edge, sits centred */
   width:min(72vw,300px);
   transform:translateX(-50%) scale(.97);
   max-height:none;background:#000;
   justify-content:flex-start;align-items:stretch;
-  padding:calc(16px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom));
+  padding:16px 12px;
 }
 .card.roll.on{transform:translateX(-50%) scale(1)}
 .card.roll .card-title{color:var(--mint);font-size:13px}
+#rollCount{color:#fff}
 
 #rollGrid{
   display:flex;flex-direction:column;gap:10px;width:100%;margin-top:14px;
@@ -270,7 +271,11 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 }
 .thumb[aria-pressed="true"]::after{box-shadow:inset 0 0 0 3px #fff}
 .cpill:disabled{opacity:.4}
-.cpill.primary{background:var(--mint);color:var(--black)}
+/* the primary action reads as one: taller, bolder, larger type */
+.cpill.primary{
+  background:var(--mint);color:var(--black);
+  height:52px;font-size:16px;font-weight:700;border-radius:26px;margin-top:4px;
+}
 
 /* header row: title + Clear all + the dismiss-only close */
 .roll-head{display:flex;align-items:center;justify-content:space-between;align-self:stretch;gap:8px}
@@ -527,7 +532,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <div id="sheetRoll" class="card roll" role="dialog" aria-modal="true" aria-label="Sliiit Roll">
   <div class="roll-head">
-    <b class="card-title" id="rollTitle" style="align-self:auto">Sliiit Roll</b>
+    <b class="card-title" id="rollTitle" style="align-self:auto">Sliiit Roll <span id="rollCount"></span></b>
     <div class="roll-head-actions">
       <button id="rollClearAll" class="roll-text-btn">Clear all</button>
       <button id="rollX" class="roll-x" aria-label="Close"></button>
@@ -1482,7 +1487,7 @@ async function openRoll(){
   const grid = $('rollGrid');
   freeRollUrls();
   grid.innerHTML = '';
-  $('rollTitle').textContent = `Sliiit Roll (${all.length})`;
+  $('rollCount').textContent = all.length;
   for (const r of all){
     const url = URL.createObjectURL(r.blob);
     rollUrls.push(url);
