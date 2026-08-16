@@ -230,21 +230,30 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 /* A real roll: a narrow, full-height film strip rather than a centred card.
    Black ground (its own thumbnails carry all the colour), full-width frames
    stacked in one scrolling column. */
+/* A real ribbon: the frame strip runs the FULL screen height, edge to edge,
+   behind everything. The header and Save keep the exact on-screen position
+   they had when the card was inset 32px+16px from each edge — they are now
+   floating panels absolutely positioned within this taller container rather
+   than flex children bounded by it, but the numbers (48px) are the same
+   offset, just measured from the new full-height container's own edges. */
 .card.roll{
-  left:50%;top:32px;bottom:32px;height:auto;   /* clear of the screen edge, sits centred */
+  left:50%;top:0;bottom:0;height:100dvh;
   width:min(72vw,300px);
   transform:translateX(-50%) rotate(5deg) scale(.97);
   max-height:none;background:#000;
-  justify-content:flex-start;align-items:stretch;
-  padding:16px 12px;
+  display:block;padding:0;
 }
 .card.roll.on{transform:translateX(-50%) rotate(5deg) scale(1)}
 .card.roll .card-title{color:var(--mint);font-size:13px}
 #rollCount{color:#fff}
 
+/* the ribbon itself: fills the tilted container edge to edge, no rounding
+   of its own (a strip runs off both ends) — only individual frames round */
 #rollGrid{
-  display:flex;flex-direction:column;gap:10px;width:100%;margin-top:14px;
-  flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  position:absolute;inset:0;z-index:1;background:#000;
+  display:flex;flex-direction:column;justify-content:center;gap:10px;
+  padding:110px 0 112px;                 /* clears the floating header/Save */
+  overflow-y:auto;overscroll-behavior:contain;
   -webkit-overflow-scrolling:touch;
 }
 #rollGrid:empty::after{
@@ -274,11 +283,23 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 /* the primary action reads as one: taller, bolder, larger type */
 .cpill.primary{
   background:var(--mint);color:var(--black);
-  height:52px;font-size:16px;font-weight:700;border-radius:26px;margin-top:4px;
+  height:52px;font-size:16px;font-weight:700;border-radius:26px;
 }
+/* floats over the ribbon at the same on-screen spot the old inset card put
+   it — same 48px offset (32px card inset + 16px padding), now measured
+   from the full-height container's own bottom edge instead */
+#rollSave{position:absolute;bottom:48px;left:12px;right:12px;z-index:2}
 
 /* header row: title + Clear all + the dismiss-only close */
-.roll-head{display:flex;align-items:center;justify-content:space-between;align-self:stretch;gap:8px}
+/* floats over the ribbon at the same on-screen spot the old inset card put
+   it; its own solid+blurred backing keeps the title legible over whatever
+   is scrolling behind it */
+.roll-head{
+  position:absolute;top:48px;left:12px;right:12px;z-index:2;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  background:rgba(0,0,0,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  padding:10px 12px;border-radius:14px;
+}
 .roll-head-actions{display:flex;align-items:center;gap:12px;flex:0 0 auto}
 .roll-text-btn{font-size:12px;font-weight:600;color:var(--mint-dim)}
 .roll-x{
