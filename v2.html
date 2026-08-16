@@ -212,7 +212,16 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   border-radius:9px;border:2px solid var(--mint);background:var(--black);
   display:grid;place-items:center;
 }
-#btnRoll img{width:100%;height:100%;object-fit:cover;display:block;border-radius:7px}
+/* absolutely positioned, not a stretched grid item: place-items:center on
+   the button sizes grid children to their own content, so width/height:100%
+   had no real box to resolve against — height fell back to the image's own
+   aspect ratio (a tall Strip capture rendered 36x1412px, unmasked past the
+   frame). inset:0 against the button's own position:relative fixes the box
+   outright; border-radius then clips the image's painted content to it. */
+#btnRoll img{
+  position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;display:block;border-radius:7px;
+}
 #rollBadge{
   position:absolute;top:-7px;right:-7px;min-width:19px;height:19px;padding:0 5px;
   border-radius:10px;background:var(--mint);color:var(--black);
