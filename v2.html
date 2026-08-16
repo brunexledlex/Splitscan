@@ -227,50 +227,69 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   border-radius:10px;background:var(--mint);color:var(--black);
   font-size:10px;line-height:19px;text-align:center;font-weight:700;
 }
+/* A real roll: a narrow, full-height film strip rather than a centred card.
+   Black ground (its own thumbnails carry all the colour), full-width frames
+   stacked in one scrolling column. */
 .card.roll{
-  width:min(92vw,420px);
-  top:50%;                                   /* centred: the grid is tall */
-  transform:translate(-50%,-50%) scale(.96);
-  max-height:min(78dvh,640px);
+  left:50%;top:0;bottom:0;height:100dvh;
+  width:min(72vw,300px);
+  transform:translateX(-50%) scale(.97);
+  max-height:none;background:#000;
+  justify-content:flex-start;align-items:stretch;
+  padding:calc(16px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom));
 }
-.card.roll.on{transform:translate(-50%,-50%) scale(1)}
-/* a plain mosaic — four square thumbs per row, no overlap, no stacking */
+.card.roll.on{transform:translateX(-50%) scale(1)}
+.card.roll .card-title{color:var(--mint);font-size:13px}
+
 #rollGrid{
-  display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;
-  max-height:min(52dvh,420px);overflow-y:auto;overscroll-behavior:contain;
+  display:flex;flex-direction:column;gap:10px;width:100%;margin-top:14px;
+  flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   -webkit-overflow-scrolling:touch;
 }
 #rollGrid:empty::after{
-  content:'No captures yet';grid-column:1/-1;text-align:center;
-  font-size:12px;color:rgba(0,0,0,.55);padding:18px 0;
+  content:'No captures yet';text-align:center;
+  font-size:12px;color:rgba(255,255,255,.45);padding:18px 0;
 }
+/* fixed frame height, full width — a real roll shows every exposure at the
+   same size, whatever the source capture's own aspect ratio */
 .thumb{
-  position:relative;aspect-ratio:1/1;border-radius:8px;overflow:hidden;
-  background:var(--black);
+  position:relative;width:100%;height:170px;flex:0 0 auto;
+  border-radius:12px;overflow:hidden;background:#151515;
+  touch-action:pan-y;                    /* long-press is JS's; scroll stays native */
 }
-.thumb img{width:100%;height:100%;object-fit:cover;display:block}
-/* selection now means "marked for deletion" — a red wash, not a dim-out,
-   because you want to see exactly what you're about to lose */
+.thumb img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+/* selection is a plain white ring — no wash, no badge. A box-shadow on
+   .thumb ITSELF paints behind the full-bleed img (children always paint
+   over their parent's own box-shadow), so it was rendering completely
+   invisible underneath the photo. A ::after generates after the img in
+   paint order and sits on top instead, where the ring can actually show. */
 .thumb::after{
-  content:'';position:absolute;inset:0;background:var(--danger);opacity:0;
-  transition:opacity .12s var(--ease);
+  content:'';position:absolute;inset:0;border-radius:inherit;
+  box-shadow:inset 0 0 0 0 #fff;pointer-events:none;
+  transition:box-shadow .1s var(--ease);
 }
-.thumb[aria-pressed="true"]::after{opacity:.45}
-.thumb .tick{
-  position:absolute;right:4px;top:4px;width:17px;height:17px;border-radius:50%;
-  background:rgba(255,255,255,.35);color:transparent;font-size:11px;line-height:17px;
-  text-align:center;font-weight:700;transition:background .12s var(--ease),color .12s var(--ease);
-}
-.thumb[aria-pressed="true"] .tick{background:var(--danger);color:#fff}
+.thumb[aria-pressed="true"]::after{box-shadow:inset 0 0 0 3px #fff}
 .cpill:disabled{opacity:.4}
+.cpill.primary{background:var(--mint);color:var(--black)}
 
-/* header row: title + the dismiss-only close, top of the card */
-.roll-head{display:flex;align-items:center;justify-content:space-between;align-self:stretch}
+/* header row: title + Clear all + the dismiss-only close */
+.roll-head{display:flex;align-items:center;justify-content:space-between;align-self:stretch;gap:8px}
+.roll-head-actions{display:flex;align-items:center;gap:12px;flex:0 0 auto}
+.roll-text-btn{font-size:12px;font-weight:600;color:var(--mint-dim)}
 .roll-x{
   width:26px;height:26px;border-radius:50%;flex:0 0 auto;
-  display:grid;place-items:center;background:rgba(0,0,0,.08);color:var(--black);
+  display:grid;place-items:center;background:rgba(255,255,255,.1);color:var(--mint);
 }
 .roll-x svg{width:16px;height:16px;fill:currentColor}
+
+/* long-press preview: the real capture, uncropped, on its own top layer */
+.roll-preview{
+  position:fixed;inset:0;z-index:7;background:rgba(0,0,0,.92);
+  display:grid;place-items:center;opacity:0;pointer-events:none;
+  transition:opacity .1s linear;
+}
+.roll-preview.on{opacity:1}
+.roll-preview img{max-width:92vw;max-height:88dvh;object-fit:contain;border-radius:6px}
 
 /* ── export card (Figma Frame 8): mint, centred, three pills ──────── */
 .card{
@@ -506,14 +525,21 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
 </div>
 
-<div id="sheetRoll" class="card roll" role="dialog" aria-modal="true" aria-label="Roll">
+<div id="sheetRoll" class="card roll" role="dialog" aria-modal="true" aria-label="Sliiit Roll">
   <div class="roll-head">
-    <b class="card-title" style="align-self:auto">Roll</b>
-    <button id="rollX" class="roll-x" aria-label="Close"></button>
+    <b class="card-title" id="rollTitle" style="align-self:auto">Sliiit Roll</b>
+    <div class="roll-head-actions">
+      <button id="rollClearAll" class="roll-text-btn">Clear all</button>
+      <button id="rollX" class="roll-x" aria-label="Close"></button>
+    </div>
   </div>
   <div id="rollGrid"></div>
-  <button class="cpill" id="rollSave">Save</button>
-  <button class="cpill danger" id="rollDelete" disabled>Delete</button>
+  <button class="cpill primary" id="rollSave">Save</button>
+</div>
+
+<!-- long-press a thumbnail: the real capture, uncropped, closes on finger up -->
+<div id="rollPreview" class="roll-preview" aria-hidden="true">
+  <img id="rollPreviewImg" alt="">
 </div>
 
 <div id="snack" role="status" aria-live="polite"></div>
@@ -1403,20 +1429,60 @@ async function refreshRoll(){
   } else { img.removeAttribute('src'); }
 }
 
-/* ── roll dialog: a plain mosaic, select to mark for deletion ─────────
-   Selection here means one thing only — "delete this" — so thumbs start
-   UNSELECTED (nothing is destroyed by default) and the live count lands on
-   the Delete button, not Save. Save always exports the whole roll: the two
-   actions no longer share one selection state, which is what let the old
-   version's Save silently exclude whatever you had just marked for deletion. */
+/* ── roll dialog: a real film roll — full-width frames, one column ────
+   Selection is a plain white ring, nothing more, and it feeds Save: if
+   anything is selected, Save exports just that; if nothing is, it exports
+   the whole roll. Deletion is no longer selection-driven at all — Clear
+   all, in the header, wipes the whole roll in one action.
+
+   Tap vs. long-press is disambiguated by hand rather than layering a click
+   listener on top of pointer events (which would double-fire): a press
+   under PRESS_MS with under MOVE_CANCEL px of drift toggles selection; a
+   press held past PRESS_MS opens the full capture and closes the instant
+   the finger lifts; a press that drifts more than MOVE_CANCEL px is a
+   scroll attempt and does neither. touch-action:pan-y on .thumb keeps
+   native vertical scrolling working throughout. */
 let rollUrls = [];
 function freeRollUrls(){ rollUrls.forEach(URL.revokeObjectURL); rollUrls = []; }
+
+const PRESS_MS = 380, MOVE_CANCEL = 12;
+
+function wireThumbPress(b, url){
+  let timer = null, fired = false, moved = false, sx = 0, sy = 0;
+  const onMove = e => {
+    if (Math.hypot(e.clientX - sx, e.clientY - sy) > MOVE_CANCEL) moved = true;
+  };
+  const onUp = () => {
+    clearTimeout(timer);
+    b.removeEventListener('pointermove', onMove);
+    b.removeEventListener('pointerup', onUp);
+    b.removeEventListener('pointercancel', onUp);
+    if (fired) closePreview();
+    else if (!moved)
+      b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+  };
+  b.addEventListener('pointerdown', ev => {
+    fired = false; moved = false; sx = ev.clientX; sy = ev.clientY;
+    try{ b.setPointerCapture(ev.pointerId); } catch(e){}   // can legitimately fail; harmless
+    timer = setTimeout(() => { if (!moved){ fired = true; openPreview(url); } }, PRESS_MS);
+    b.addEventListener('pointermove', onMove);
+    b.addEventListener('pointerup', onUp);
+    b.addEventListener('pointercancel', onUp);
+  });
+}
+
+function openPreview(url){
+  $('rollPreviewImg').src = url;
+  $('rollPreview').classList.add('on');
+}
+function closePreview(){ $('rollPreview').classList.remove('on'); }
 
 async function openRoll(){
   const all = (await rollAll()).sort((a,b) => b.at - a.at);   // newest first
   const grid = $('rollGrid');
   freeRollUrls();
   grid.innerHTML = '';
+  $('rollTitle').textContent = `Sliiit Roll (${all.length})`;
   for (const r of all){
     const url = URL.createObjectURL(r.blob);
     rollUrls.push(url);
@@ -1425,28 +1491,22 @@ async function openRoll(){
     b.setAttribute('aria-pressed','false');
     b.setAttribute('aria-label', r.name);
     b.dataset.name = r.name;
-    b.innerHTML = `<img src="${url}" alt=""><span class="tick">\u2713</span>`;
-    b.onclick = () => {
-      b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
-      syncRollActions();
-    };
+    b.innerHTML = `<img src="${url}" alt="">`;
+    wireThumbPress(b, url);
     grid.appendChild(b);
   }
   $('rollSave').disabled = all.length === 0;
-  syncRollActions();
   openSheet('sheetRoll');
 }
 const rollSelected = () =>
   [...document.querySelectorAll('#rollGrid .thumb[aria-pressed="true"]')].map(b => b.dataset.name);
-function syncRollActions(){
-  const n = rollSelected().length;
-  $('rollDelete').textContent = n ? `Delete ${n}` : 'Delete';
-  $('rollDelete').disabled = !n;
-}
 
-/* one gesture exports the entire roll, regardless of selection */
+/* Save exports the selection if there is one, the whole roll if there is not */
 async function saveAll(){
-  const all = (await rollAll()).sort((a,b) => a.at - b.at);
+  const picked = new Set(rollSelected());
+  const all = (await rollAll())
+    .filter(r => !picked.size || picked.has(r.name))
+    .sort((a,b) => a.at - b.at);
   if (!all.length) return snack('Roll is empty.', 2000);
   const files = all.map(r => new File([r.blob], r.name, {type:'image/png'}));
   try{
@@ -1464,18 +1524,15 @@ async function saveAll(){
   closeSheets(); freeRollUrls();
 }
 
-/* delete every marked capture, then redraw the grid in place — the dialog
-   stays open, since you may want to mark and delete another batch right after */
-async function performRollDelete(){
-  const names = rollSelected();
-  if (!names.length) return;
-  for (const name of names) await rollDel(name);
+/* wipes the ENTIRE roll — no selection involved — then redraws in place */
+async function performClearAll(){
+  const all = await rollAll();
+  if (!all.length) return;
+  for (const r of all) await rollDel(r.name);
   await refreshRoll();
   await openRoll();
-  snack(`Deleted ${names.length}`, 1800);
+  snack('Roll cleared', 1600);
 }
-
-
 
 /* ── sheets ───────────────────────────────────────────────────────── */
 function openSheet(id){
@@ -1485,12 +1542,13 @@ function openSheet(id){
 function closeSheets(){
   document.querySelectorAll('.sheet, .card').forEach(s => s.classList.remove('on'));
   $('scrim').classList.remove('on');
+  closePreview();
 }
 $('scrim').addEventListener('click', () => { closeSheets(); freeRollUrls(); });
 $('btnTune').addEventListener('click', () => openSheet('sheetTune'));
 $('btnRoll').addEventListener('click', openRoll);
 $('rollSave').addEventListener('click', saveAll);
-$('rollDelete').addEventListener('click', performRollDelete);
+$('rollClearAll').addEventListener('click', performClearAll);
 $('rollX').addEventListener('click', () => { closeSheets(); freeRollUrls(); });
 $('tuneDone').addEventListener('click', closeSheets);
 $('btnAdvanced').addEventListener('click', e => {
@@ -1641,7 +1699,7 @@ const SWIPE_MIN = 28;
 
 vp.addEventListener('pointerdown', ev => {
   if (!src.el || !W) return;
-  vp.setPointerCapture(ev.pointerId);
+  try{ vp.setPointerCapture(ev.pointerId); } catch(e){}   // can legitimately fail; harmless
   glowTarget = 1;
   if (S.mode === 'field'){
     grabbed = nearHandle(toCanvas(ev));
