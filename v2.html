@@ -1269,7 +1269,10 @@ function frame(dt){
   } else {
     if (state === 'idle'){
       ax.setTransform(1,0,0,1,0,0);
-      drawSource(ax);                     // live preview, nothing accumulating
+      if (src.kind === 'demo'){
+        ax.fillStyle = '#000'; ax.fillRect(0,0,W,H);
+        ax.save(); ax.globalAlpha = 0.15; drawSource(ax); ax.restore();
+      } else drawSource(ax);              // live preview, nothing accumulating
     }
     stepFor(dt);
   }
