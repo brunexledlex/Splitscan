@@ -882,7 +882,7 @@ addEventListener('keydown', e => {
 // is a different cache key each release, forcing a genuine fetch. Bump it
 // whenever sw.js changes — it must match the CACHE constant inside sw.js.
 if ('serviceWorker' in navigator && window.isSecureContext){
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=4').catch(() => {}));
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=5').catch(() => {}));
 }
 document.addEventListener('visibilitychange', () => { last = 0; });
 applyMode();

@@ -530,9 +530,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
 </div>
 
-<div id="sheetRoll" class="card roll" role="dialog" aria-modal="true" aria-label="Sliiit Roll">
+<div id="sheetRoll" class="card roll" role="dialog" aria-modal="true" aria-label="SLIIIT Roll">
   <div class="roll-head">
-    <b class="card-title" id="rollTitle" style="align-self:auto">Sliiit Roll <span id="rollCount"></span></b>
+    <b class="card-title" id="rollTitle" style="align-self:auto">SLIIIT Roll <span id="rollCount"></span></b>
     <div class="roll-head-actions">
       <button id="rollClearAll" class="roll-text-btn">Clear all</button>
       <button id="rollX" class="roll-x" aria-label="Close"></button>
@@ -578,7 +578,6 @@ $('rollX').innerHTML = svg('close');    // dismiss the roll, no side effects
 /* ── canvases ─────────────────────────────────────────────────────── */
 const acc = $('acc'), hud = $('hud'), video = $('vid');
 const ax = acc.getContext('2d'), hx = hud.getContext('2d');
-const demoCv = document.createElement('canvas'), dx = demoCv.getContext('2d');
 
 let W = 0, H = 0;                      // accumulation size (viewport aspect)
 let state = 'idle';                    // idle | scanning | export
@@ -602,31 +601,14 @@ function snack(msg, ms = 2600){
   clearTimeout(snackT); snackT = setTimeout(() => s.classList.remove('on'), ms);
 }
 
-/* ── demo source ──────────────────────────────────────────────────── */
-demoCv.width = 1280; demoCv.height = 720;
-let demoT = 0;
-function renderDemo(dt){
-  demoT += dt;
-  const w = demoCv.width, h = demoCv.height, t = demoT;
-  dx.fillStyle = '#14100C'; dx.fillRect(0,0,w,h);
-  const bars = ['#FFB868','#EDE0D4','#2EC4FF','#FF5A4E','#8CFF6B'];
-  for (let i=0;i<26;i++){
-    const x = ((i*96 - t*190) % (w+200) + w+200) % (w+200) - 100;
-    dx.fillStyle = bars[i%bars.length]; dx.globalAlpha = .85;
-    dx.fillRect(x,0,26,h);
-  }
-  dx.globalAlpha = 1;
-  dx.save(); dx.translate(w/2,h/2); dx.rotate(t*.55);
-  for (let i=0;i<12;i++){
-    dx.rotate(TAU/12);
-    dx.fillStyle = i%2 ? '#14100C' : '#EDE0D4';
-    dx.beginPath(); dx.moveTo(0,0); dx.arc(0,0,240,-.13,.13); dx.closePath(); dx.fill();
-  }
-  dx.restore();
-  const bx = w/2 + Math.sin(t*2.1)*(w*.42), by = h/2 + Math.cos(t*3.3)*(h*.36);
-  dx.fillStyle = '#FFB868'; dx.beginPath(); dx.arc(bx,by,34,0,TAU); dx.fill();
-  dx.fillStyle = '#14100C'; dx.beginPath(); dx.arc(bx,by,14,0,TAU); dx.fill();
-}
+/* ── placeholder source ───────────────────────────────────────────────
+   Shown only while the camera permission request is in flight (or if it's
+   refused) — the app goes straight for the camera on boot, this is just
+   what covers the gap. A static image needs no per-frame drawing, unlike
+   the animated demo it replaces. */
+const placeholderImg = new Image();
+placeholderImg.src = './placeholder.jpg';
+const placeholderReady = placeholderImg.decode().catch(() => {});
 
 /* ── sizing: accumulate at the VIEWPORT's aspect ──────────────────────
    Full-bleed with no display crop — what you see is exactly the buffer.
@@ -1252,7 +1234,6 @@ $('sBlur').addEventListener('input', e => { AA.blur = +e.target.value; aaSyncLab
 
 /* ── loop ─────────────────────────────────────────────────────────── */
 function frame(dt){
-  if (src.kind === 'demo') renderDemo(dt);
   if (!src.el || !W) return;
 
   glow += (glowTarget - glow) * Math.min(1, dt*8);
@@ -1742,7 +1723,8 @@ function waitForFrames(ms = 8000){
 }
 function useDemo(){
   stopStream(); video.srcObject=null; video.removeAttribute('src'); video.load?.();
-  src.el = demoCv; src.w = demoCv.width; src.h = demoCv.height;
+  src.el = placeholderImg;
+  src.w = placeholderImg.naturalWidth || 1200; src.h = placeholderImg.naturalHeight || 630;
   src.kind = 'demo'; src.mirror = false;
   resize(); clearAcc();
 }
@@ -1825,7 +1807,7 @@ async function useFile(f){
 // see sw.js for why a bare './sw.js' can look unchanged for 10 minutes on
 // GitHub Pages even right after a real deploy.
 if ('serviceWorker' in navigator && window.isSecureContext){
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=4').catch(() => {}));
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=5').catch(() => {}));
 }
 addEventListener('resize', () => {
   resize(); syncCapture();
@@ -1834,21 +1816,30 @@ addEventListener('resize', () => {
 document.addEventListener('visibilitychange', () => { last = 0; });
 applyMode(); setState('idle'); aaSyncLabels(); syncCapture(); refreshRoll();
 
-/* The live preview is the camera. Demo renders first so there is never a
-   black screen, then the camera replaces it. iOS only grants getUserMedia
-   without a gesture once the origin already has permission, so a refusal
-   here is expected on a first visit — we stay on demo and say how to fix it
-   rather than failing to a blank viewport. */
+/* Go straight for the camera — useCamera fires on the very first line,
+   synchronously up to its own internal await, so the permission prompt
+   appears as early as it possibly can. The placeholder image only covers
+   the gap while that's pending: if the camera resolves before the (small,
+   local) image even finishes decoding — a returning visit with permission
+   already granted — src.kind is already 'camera' by the time we check, and
+   the placeholder never shows at all. If the OS prompt is genuinely waiting
+   on the person, the image is what's behind it in the meantime. */
 (async () => {
-  useDemo();
+  const camPromise = useCamera('environment', true);
+  camPromise.catch(() => {});   // mark handled now; awaited properly below —
+                                // otherwise the gap while placeholderReady
+                                // resolves is enough for a fast rejection
+                                // (camera blocked/denied) to log as unhandled
+  await placeholderReady;
+  if (src.kind !== 'camera') useDemo();
   try {
-    await useCamera('environment', true);
+    await camPromise;
   } catch (e) {
     press($('segSource'),'source','');
     if (e && e.name === 'NotAllowedError')
       snack('Tap Camera ▸ Rear to allow the camera.', 5000);
     else if (!isSecureContext)
-      snack('Camera needs https — showing the demo source.', 5000);
+      snack('Camera needs https — showing the placeholder.', 5000);
   }
 })();
 requestAnimationFrame(tick);
