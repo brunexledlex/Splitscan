@@ -1,4 +1,4 @@
-# SLIIIT
+# SPLIIIT
 
 **A slit-scan camera for the iPhone, with slit shapes beyond vertical and
 horizontal — a line, a burst, and a force field.**
@@ -8,7 +8,7 @@ store listing, and it will probably never have one. It exists because I love
 photography, and because slit-scan is the corner of photography where the
 camera stops describing space and starts describing time.
 
-**[Open the current build →](https://brunexledlex.github.io/slitscan/v2.html)**
+**[Open the current build →](https://brunexledlex.github.io/Splitscan/v2.html)**
 
 ![Burst — a circular slit reading as a sunburst](examples/v2-burst.png)
 
@@ -119,7 +119,7 @@ does something before it asks for permissions.
 Two builds live side by side:
 
 ```
-v2.html      the current app — SLIIIT, all three shapes, anti-aliasing, the roll
+v2.html      the current app — SPLIIIT, all three shapes, anti-aliasing, the roll
 index.html   the original prototype (Sweep / Radial / Strip, the darkroom UI)
 ```
 
@@ -197,7 +197,7 @@ index.html              original prototype
 sw.js                   offline shell, shared by both builds
 manifest.webmanifest    home-screen install
 icon-*.png              generated, not drawn
-logo.svg                the SLIIIT wordmark, inlined into v2.html
+logo.svg                the SPLIIIT wordmark, inlined into v2.html
 tools/make-icons.mjs    regenerates the icons — node tools/make-icons.mjs
 examples/               stills from the app, used in this README
 docs/                   working specs, written before each feature was built

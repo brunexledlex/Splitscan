@@ -1,6 +1,6 @@
 {
-  "name": "Slitscan",
-  "short_name": "Slitscan",
+  "name": "Splitscan",
+  "short_name": "Splitscan",
   "description": "Angled and rotating slit-scan camera.",
   "start_url": "./index.html",
   "scope": "./",

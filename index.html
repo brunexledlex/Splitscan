@@ -6,12 +6,12 @@
 <meta name="theme-color" content="#0D0A08">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Slitscan">
+<meta name="apple-mobile-web-app-title" content="Splitscan">
 <meta name="description" content="Angled and rotating slit-scan camera.">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-180.png">
 <link rel="icon" href="./icon-192.png">
-<title>Slitscan — angled &amp; rotating</title>
+<title>Splitscan — angled &amp; rotating</title>
 <style>
 /* ── darkroom instrument ───────────────────────────────────────────────
    Committed single-theme: a viewfinder stays dark. Every colour is
@@ -190,7 +190,7 @@ input[type=range]:disabled{opacity:1}
 <body>
 
 <div class="rail">
-  <div class="mark"><i></i>Slitscan</div>
+  <div class="mark"><i></i>Splitscan</div>
   <div class="readout">
     <span id="rMode">RADIAL</span>
     <span>θ <b id="rAngle">000.0°</b></span>
@@ -882,7 +882,7 @@ addEventListener('keydown', e => {
 // is a different cache key each release, forcing a genuine fetch. Bump it
 // whenever sw.js changes — it must match the CACHE constant inside sw.js.
 if ('serviceWorker' in navigator && window.isSecureContext){
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=5').catch(() => {}));
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=6').catch(() => {}));
 }
 document.addEventListener('visibilitychange', () => { last = 0; });
 applyMode();

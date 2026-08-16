@@ -7,7 +7,7 @@ Design and direction by [Bruno Silva](https://ditongo.com) / [Ditongo](https://d
 
 ---
 
-## v2 — SLIIIT
+## v2 — SPLIIIT
 
 The app was rebuilt against a Figma spec partway through, and the identity
 changed with it: bituminous-black ground, a single mint accent (`#CEFDD3`),
