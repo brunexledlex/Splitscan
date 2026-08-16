@@ -87,7 +87,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 
 
 /* ── bottom: the mint bar ─────────────────────────────────────────────
-   The bar now holds only the mode selector — Rate and Anti-aliasing moved
+   The bar now holds only the mode selector — Rate and Warp moved
    up onto the live preview so the selector can have the full width. Four
    shapes need the room more than two side buttons need to sit in the bar. */
 #bar{
@@ -113,7 +113,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 }
 #segMode button[aria-pressed="true"]{background:var(--chip);color:var(--mint)}
 
-/* Rate and Anti-aliasing: floating pills over the image, right above the
+/* Rate and Warp: floating pills over the image, right above the
    bar — the same look they had inside it, just no longer sharing its row. */
 .pill{
   position:fixed;z-index:3;
@@ -129,7 +129,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 #btnAA{right:15px;color:var(--mint-dim)}
 #btnAA[aria-pressed="true"]{background:var(--chip);color:var(--mint)}
 #btnAA .sm{display:none}
-/* the Figma bar was drawn at 440; below ~420 "Anti-aliasing" cannot sit
+/* the Figma bar was drawn at 440; below ~420 "Warp" cannot sit
    at full width as a floating pill without crowding the shutter */
 @media (max-width:420px){
   #btnAA .lg{display:none}
@@ -431,8 +431,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 <!-- floating over the live preview, right above the bar, so the mode
      selector below can have the bar to itself -->
 <button class="pill" id="btnRate">Rate <span id="rateVal">1</span></button>
-<button id="btnAA" class="pill" aria-pressed="false" aria-label="Anti-aliasing"><span
-  class="lg">Anti-aliasing</span><span class="sm">AA</span></button>
+<button id="btnAA" class="pill" aria-pressed="false" aria-label="Warp"><span
+  class="lg">Warp</span><span class="sm">Warp</span></button>
 
 <div id="bar">
   <div id="segMode" role="group" aria-label="Geometry">
@@ -460,14 +460,15 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
 
   <div class="group">
-    <div class="label"><span>Anti-aliasing</span><output id="oAAmem"></output></div>
-    <div class="seg" id="segAA" role="group" aria-label="Anti-aliasing">
+    <div class="label"><span>Warp</span><output id="oAAmem"></output></div>
+    <div class="seg" id="segAA" role="group" aria-label="Warp">
       <button data-aa="off" aria-pressed="true">Off</button>
       <button data-aa="on">On</button>
     </div>
     <p class="hint" id="aaHint" style="margin:8px 0 0">
-      Samples a rolling buffer of past frames with sub-pixel and sub-frame
-      interpolation. Not available in Strip — it has no fixed time depth.
+      Re-renders the whole frame every tick from a rolling buffer of past
+      frames — a live, warped window into the last few seconds, not a
+      smoothing filter. Not available in Strip — it has no fixed time depth.
     </p>
   </div>
 
@@ -500,6 +501,18 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <button data-slice="8">8</button>
       <button data-slice="16">16</button>
     </div>
+  </div>
+
+  <div class="group">
+    <div class="label"><span>Smoothing</span></div>
+    <div class="seg" id="segSmooth" role="group" aria-label="Smoothing">
+      <button data-smooth="on" aria-pressed="true">On</button>
+      <button data-smooth="off">Off</button>
+    </div>
+    <p class="hint" style="margin:8px 0 0">
+      Feathers the edge of every slice as it's painted, so the seam between
+      one instant and the next blends instead of stepping. Works in every mode.
+    </p>
   </div>
 
   <button class="chip" id="btnAdvanced" aria-expanded="false"
@@ -609,13 +622,15 @@ let state = 'idle';                    // idle | scanning | export
 
 const S = {
   mode:'burst', angle:0, slice:1, dir:'right', bandW:0.10, capture:'screen', autoSave:true,
-  cx:.5, cy:.5, reverse:false, guides:true, manual:false,
+  cx:.5, cy:.5, reverse:false, guides:true, manual:false, smooth:true,
 };
+const FEATHER = 3;   // px (device-res canvas units) softened at each slice edge
 const RATE = { swipe:200, burst:240, field:200 };   // px/s, fixed per shape
 const src = { el:null, w:0, h:0, kind:null, mirror:false, stream:null, facing:'environment' };
 
 let sweepS = 0, sweepPrev = 0, ringR = 0, ringPrev = 0, fieldD = 0, fieldPrev = 0;
 let stripCv = null, sxc = null, stripX = 0, stripAcc = 0, stripCap = 0;   // Strip's own wide buffer
+let fthCv = null, fx = null;               // Smoothing: full-frame scratch for Swipe/Field/Burst
 let passComplete = false;
 let last = 0, glow = 0, glowTarget = 0;            // barrel ghosting
 
@@ -709,18 +724,58 @@ function maxRadius(){
 const bandHalf = () => S.bandW * Math.min(W,H);
 const fieldMax = () => sweepLength()/2;
 
-/* clip the strip between two signed distances along the band normal */
+function ensureFeather(){
+  if (fthCv && fthCv.width === W && fthCv.height === H) return;
+  fthCv = document.createElement('canvas');
+  fthCv.width = W; fthCv.height = H;
+  fx = fthCv.getContext('2d');
+}
+
+/* clip the strip between two signed distances along the band normal.
+
+   Smoothing can't just soften this slice's own edge: consecutive slices sit
+   side by side, so fading the boundary would expose the empty canvas rather
+   than the previous exposure. Instead the slice is EXTENDED backwards by
+   FEATHER px so it genuinely overlaps its predecessor, painted to a scratch
+   canvas, alpha-ramped 0→1 across that overlap (destination-in multiplies
+   the drawn pixels' alpha), and blended over the accumulation buffer — a
+   real cross-fade between the two moments. */
 function paintBand(s0, s1){
   const th = S.angle*DEG, nx = -Math.sin(th), ny = Math.cos(th);
   const dxv = Math.cos(th), dyv = Math.sin(th), D = Math.hypot(W,H);
   const cx = W/2, cy = H/2;
-  ax.save(); ax.beginPath();
-  ax.moveTo(cx+nx*s0-dxv*D, cy+ny*s0-dyv*D);
-  ax.lineTo(cx+nx*s0+dxv*D, cy+ny*s0+dyv*D);
-  ax.lineTo(cx+nx*s1+dxv*D, cy+ny*s1+dyv*D);
-  ax.lineTo(cx+nx*s1-dxv*D, cy+ny*s1-dyv*D);
-  ax.closePath(); ax.clip();
-  drawSource(ax); ax.restore();
+  const band = (c, a, b) => {
+    c.beginPath();
+    c.moveTo(cx+nx*a-dxv*D, cy+ny*a-dyv*D);
+    c.lineTo(cx+nx*a+dxv*D, cy+ny*a+dyv*D);
+    c.lineTo(cx+nx*b+dxv*D, cy+ny*b+dyv*D);
+    c.lineTo(cx+nx*b-dxv*D, cy+ny*b-dyv*D);
+    c.closePath();
+  };
+  if (!S.smooth){
+    ax.save(); band(ax, s0, s1); ax.clip();
+    drawSource(ax); ax.restore();
+    return;
+  }
+  // trailing edge depends on which way the slit is travelling
+  const back  = dir() > 0 ? s0 : s1;
+  const front = dir() > 0 ? s1 : s0;
+  const ext   = back - (dir() > 0 ? FEATHER : -FEATHER);
+
+  ensureFeather();
+  fx.clearRect(0,0,W,H);
+  fx.save(); band(fx, ext, front); fx.clip();
+  drawSource(fx); fx.restore();
+
+  fx.save();
+  fx.globalCompositeOperation = 'destination-in';
+  const g = fx.createLinearGradient(cx+nx*ext, cy+ny*ext, cx+nx*back, cy+ny*back);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,1)');    // clamps opaque past `back`
+  fx.fillStyle = g; fx.fillRect(0,0,W,H);
+  fx.restore();
+
+  ax.drawImage(fthCv, 0, 0);
 }
 
 function passProgress(){
@@ -769,10 +824,39 @@ function stepBurst(dt){
   r0 = Math.max(r0, 0);
   if (r1 <= 0) return;
   const px = S.cx*W, py = S.cy*H;
-  ax.save(); ax.beginPath();
-  ax.arc(px,py,r1,0,TAU);
-  if (r0 > 0) ax.arc(px,py,r0,0,TAU,true);   // counter-wound: a ring, not a disc
-  ax.clip(); drawSource(ax); ax.restore();
+  const ring = (c, a, b) => {           // b outer, a inner; counter-wound
+    c.beginPath();
+    c.arc(px,py,b,0,TAU);
+    if (a > 0) c.arc(px,py,a,0,TAU,true);
+  };
+  // an expanding ring trails at r0, a contracting one at r1. Feathering is
+  // skipped while an expanding ring is still at the pivot: extending it
+  // inward past 0 would fade out the one point every Burst shares.
+  const atPivot = dir() > 0 && r0 <= FEATHER;
+  if (!S.smooth || atPivot){
+    ax.save(); ring(ax, r0, r1); ax.clip();
+    drawSource(ax); ax.restore();
+    return;
+  }
+  const back = dir() > 0 ? r0 : r1;
+  const ext  = dir() > 0 ? r0 - FEATHER : r1 + FEATHER;
+
+  ensureFeather();
+  fx.clearRect(0,0,W,H);
+  fx.save();
+  ring(fx, Math.min(ext,r0), Math.max(ext,r1));
+  fx.clip(); drawSource(fx); fx.restore();
+
+  fx.save();
+  fx.globalCompositeOperation = 'destination-in';
+  const g = fx.createRadialGradient(px,py,Math.max(Math.min(ext,back),0),
+                                    px,py,Math.max(Math.max(ext,back),0.01));
+  g.addColorStop(0, dir() > 0 ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,1)');
+  g.addColorStop(1, dir() > 0 ? 'rgba(0,0,0,1)' : 'rgba(0,0,0,0)');
+  fx.fillStyle = g; fx.fillRect(0,0,W,H);
+  fx.restore();
+
+  ax.drawImage(fthCv, 0, 0);
 }
 
 /* Field: a live band in the middle, two slits running outward from it in
@@ -800,9 +884,9 @@ function stepField(dt){
    GROWING: one column sampled from that fixed edge is appended per frame,
    the actual photo-finish technique. Unbounded, so it needs its own wide
    buffer rather than the shared W×H canvas, sized off the same
-   device-resolution ceiling the rest of capture already uses — and it is
-   the one shape anti-aliasing cannot reach, because there is no fixed
-   time depth to sample. */
+   device-resolution ceiling the rest of capture already uses. Its slice
+   edge is already axis-aligned, so Smoothing just erases a gradient down
+   the new column's left edge, letting the previous column show through. */
 function computeStripCap(h){
   const byArea = Math.floor(MAX_AREA / Math.max(h,1));
   return clamp(byArea, 1280, MAX_LONG);
@@ -837,13 +921,31 @@ function stepStrip(dt){
     if (stripX + adv >= stripCap){
       passComplete = true;
     } else {
-      // clip to the new slot, then shift the WHOLE live frame left so its
-      // own right edge lands exactly on that slot — the fixed source column
-      sxc.save();
-      sxc.beginPath(); sxc.rect(stripX, 0, adv, H); sxc.clip();
-      sxc.translate(stripX + adv - W, 0);
-      drawSource(sxc);
-      sxc.restore();
+      const F = S.smooth ? Math.min(FEATHER, stripX) : 0;
+      if (!F){
+        // clip to the new slot, then shift the WHOLE live frame left so its
+        // own right edge lands exactly on that slot — the fixed source column
+        sxc.save();
+        sxc.beginPath(); sxc.rect(stripX, 0, adv, H); sxc.clip();
+        sxc.translate(stripX + adv - W, 0);
+        drawSource(sxc);
+        sxc.restore();
+      } else {
+        // same column, widened F px to the left so it overlaps the column
+        // already there, then alpha-ramped across that overlap and blended
+        // on — the strip's own cross-fade between consecutive instants
+        ensureFeather();
+        fx.clearRect(0,0,W,H);
+        drawSource(fx);
+        fx.save();
+        fx.globalCompositeOperation = 'destination-in';
+        const g = fx.createLinearGradient(W-adv-F, 0, W-adv, 0);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(1, 'rgba(0,0,0,1)');
+        fx.fillStyle = g; fx.fillRect(0,0,W,H);
+        fx.restore();
+        sxc.drawImage(fthCv, W-adv-F, 0, adv+F, H, stripX-F, 0, adv+F, H);
+      }
       stripX += adv;
     }
   }
@@ -965,7 +1067,7 @@ function drawHud(){
    tick, re-renders the whole image: each pixel samples the buffer at a
    time depth derived from the slit geometry.
 
-   Spatial anti-aliasing is hardware bilinear (LINEAR on S,T). Sub-frame
+   Spatial softness is hardware bilinear (LINEAR on S,T). Sub-frame
    temporal blending is done explicitly with two taps and a mix, because
    the ring buffer's seam puts the newest frame next to the oldest and
    hardware filtering across R would blend unrelated moments there.
@@ -1065,7 +1167,7 @@ function aaInit(){
     preserveDrawingBuffer:true,      // export reads the drawing buffer back
     powerPreference:'high-performance',
   });
-  if (!gl){ snack('This browser has no WebGL2 — anti-aliasing unavailable.', 5000); return false; }
+  if (!gl){ snack('This browser has no WebGL2 — Warp unavailable.', 5000); return false; }
   AA.gl = gl;
 
   try{
@@ -1081,7 +1183,7 @@ function aaInit(){
       AA.u[n] = gl.getUniformLocation(p, n);
     AA.vao = gl.createVertexArray();
   } catch(e){
-    snack('Anti-aliasing shader failed: ' + e.message, 6000);
+    snack('Warp shader failed: ' + e.message, 6000);
     AA.gl = null; return false;
   }
 
@@ -1089,7 +1191,7 @@ function aaInit(){
   // would go black and stay black
   $('gl').addEventListener('webglcontextlost', e => {
     e.preventDefault(); AA.lost = true;
-    snack('Graphics context lost — anti-aliasing paused.', 4000);
+    snack('Graphics context lost — Warp paused.', 4000);
     aaSetOn(false);
   });
   $('gl').addEventListener('webglcontextrestored', () => {
@@ -1583,7 +1685,7 @@ $('shutter').addEventListener('click', () => {
 $('segMode').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   S.mode = b.dataset.mode; applyMode();
-  if (S.mode === 'strip' && AA.on) snack('Anti-aliasing is unavailable in Strip.', 2200);
+  if (S.mode === 'strip' && AA.on) snack('Warp is unavailable in Strip.', 2200);
 });
 $('segSlice').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -1601,6 +1703,10 @@ function setSlice(v){
 $('segGuides').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   S.guides = b.dataset.guides === 'on'; press($('segGuides'),'guides',b.dataset.guides);
+});
+$('segSmooth').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.smooth = b.dataset.smooth === 'on'; press($('segSmooth'),'smooth',b.dataset.smooth);
 });
 $('segAuto').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -1794,7 +1900,7 @@ $('btnRate').addEventListener('click', () => {
   setSlice(RATES[(i < 0 ? 0 : i + 1) % RATES.length]);
 });
 
-/* Anti-aliasing toggles from the bar; the sheet keeps its own control
+/* Warp toggles from the bar; the sheet keeps its own control
    as the accessible twin, and both stay in sync through aaSetOn */
 $('btnAA').addEventListener('click', () => {
   aaSetOn(!AA.on);
