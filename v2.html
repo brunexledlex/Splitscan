@@ -742,6 +742,9 @@ const RATE = { swipe:200, burst:240, field:200 };   // px/s, fixed per shape
 const src = { el:null, w:0, h:0, kind:null, mirror:false, stream:null, facing:'environment' };
 
 let sweepS = 0, sweepPrev = 0, ringR = 0, ringPrev = 0, fieldD = 0, fieldPrev = 0;
+// how far the picture has actually been PAINTED to, which now lags the slit
+// by up to one slice — the two are no longer the same number
+let sweepPaint = 0, ringPaint = 0;
 let stripCv = null, sxc = null, stripX = 0, stripAcc = 0, stripCap = 0;   // Strip's own wide buffer
 let fthCv = null, fx = null;               // Smoothing: full-frame scratch for Swipe/Field/Burst
 let passComplete = false;
@@ -799,8 +802,8 @@ function clearAcc(){
   ax.setTransform(1,0,0,1,0,0);
   ax.fillStyle = '#000'; ax.fillRect(0,0,W,H);
   const L = sweepLength();
-  sweepS = sweepPrev = S.reverse ?  L/2 : -L/2;
-  ringR  = ringPrev  = S.reverse ? maxRadius() : 0;
+  sweepS = sweepPrev = sweepPaint = S.reverse ?  L/2 : -L/2;
+  ringR  = ringPrev  = ringPaint  = S.reverse ? maxRadius() : 0;
   fieldD = fieldPrev = S.reverse ? fieldMax()  : 0;
   stripX = 0; stripAcc = 0;
   if (stripCv){ sxc.fillStyle = '#000'; sxc.fillRect(0,0,stripCv.width,stripCv.height); }
@@ -910,14 +913,41 @@ function stepSwipe(dt){
   sweepPrev = sweepS;
   sweepS += dir() * RATE.swipe * dt;
   if (sweepS >  L/2){ if (state==='scanning'){ sweepS =  L/2; passComplete = true; }
-                      else { sweepS = -L/2; sweepPrev = -L/2; } }
+                      else { sweepS = -L/2; sweepPrev = -L/2; sweepPaint = -L/2; } }
   if (sweepS < -L/2){ if (state==='scanning'){ sweepS = -L/2; passComplete = true; }
-                      else { sweepS =  L/2; sweepPrev =  L/2; } }
+                      else { sweepS =  L/2; sweepPrev =  L/2; sweepPaint =  L/2; } }
   if (state !== 'scanning') return;
-  let lo = Math.min(sweepPrev,sweepS), hi = Math.max(sweepPrev,sweepS);
-  const minW = Math.max(S.slice,1);
-  if (hi-lo < minW){ const m=(lo+hi)/2; lo=m-minW/2; hi=m+minW/2; }
-  paintBand(lo, hi);
+  emitSlices(() => sweepS, () => sweepPaint, v => sweepPaint = v, paintBand);
+}
+
+/* Slice thickness, honestly applied.
+
+   It used to be a MINIMUM band width: the slit advanced RATE*dt per frame
+   (~3.3px at 60fps) and a larger slice merely widened that band around its
+   midpoint. But the leading edge still advanced at the same rate and the
+   next frame overpainted the tail, so the visible band stayed ~3.3px however
+   the setting was moved — measured 2.86px at slice 1 against 3.98px at slice
+   40, a 40x input for a 1.4x output. The control was very nearly inert in
+   every mode except Strip, which alone advances by S.slice directly.
+
+   So: the slit still traverses at RATE, keeping pass duration and the
+   progress ring unchanged, but the picture only takes a sample once a whole
+   slice of ground has gone by — and that sample is one slice wide, from one
+   instant. Slice now sets band thickness, which is what it is called. */
+function emitSlices(pos, painted, setPainted, paint){
+  const w = Math.max(S.slice,1), d = dir();
+  let guard = 512;                       // a resize mid-pass could strand these
+  while ((pos() - painted())*d >= w && guard--){
+    const a = painted(), b = a + d*w;
+    paint(Math.min(a,b), Math.max(a,b));
+    setPainted(b);
+  }
+  // the pass ends wherever it ends; paint the short remainder so the last
+  // slice isn't dropped and the picture doesn't stop short of the edge
+  if (passComplete && (pos() - painted())*d > 0){
+    paint(Math.min(painted(),pos()), Math.max(painted(),pos()));
+    setPainted(pos());
+  }
 }
 
 /* Burst: the ring's RADIUS is the time axis. Neighbouring radii are
@@ -927,13 +957,16 @@ function stepBurst(dt){
   ringPrev = ringR;
   ringR += dir() * RATE.burst * dt;
   if (ringR > R){ if (state==='scanning'){ ringR = R; passComplete = true; }
-                  else { ringR = 0; ringPrev = 0; } }
+                  else { ringR = 0; ringPrev = 0; ringPaint = 0; } }
   if (ringR < 0){ if (state==='scanning'){ ringR = 0; passComplete = true; }
-                  else { ringR = R; ringPrev = R; } }
+                  else { ringR = R; ringPrev = R; ringPaint = R; } }
   if (state !== 'scanning') return;
-  let r0 = Math.min(ringPrev,ringR), r1 = Math.max(ringPrev,ringR);
-  const minW = Math.max(S.slice,1);
-  if (r1-r0 < minW){ const m=(r0+r1)/2; r0=m-minW/2; r1=m+minW/2; }
+  emitSlices(() => ringR, () => ringPaint, v => ringPaint = v, paintRing);
+}
+
+/* one ring of the burst, between radii r0 (inner) and r1 (outer) */
+function paintRing(a, b){
+  let r0 = Math.min(a,b), r1 = Math.max(a,b);
   r0 = Math.max(r0, 0);
   if (r1 <= 0) return;
   const px = S.cx*W, py = S.cy*H;
@@ -1873,7 +1906,7 @@ function setDir(dir, announce){
   S.dir = dir;
   if (S.mode === 'swipe'){
     S.angle = EDGE_SWEEP[dir];
-    sweepS = sweepPrev = -sweepLength()/2;      // restart from that edge
+    sweepS = sweepPrev = sweepPaint = -sweepLength()/2;   // restart from that edge
   } else {
     S.angle = EDGE_POINT[dir];
   }
@@ -1888,7 +1921,7 @@ function applySwipe(drag){
 
   if (S.mode === 'burst'){
     S.reverse = (drag === 'down');
-    ringR = ringPrev = S.reverse ? maxRadius() : 0;
+    ringR = ringPrev = ringPaint = S.reverse ? maxRadius() : 0;
     clearAcc();
     return snack(S.reverse ? 'Burst inward' : 'Burst outward', 1300);
   }
