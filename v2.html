@@ -241,7 +241,19 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   background:#fff;border-radius:18px;padding:22px 20px;
   margin:18px 0;
 }
-.group.callout > .label{margin-bottom:8px}
+.group.callout > .label{margin-bottom:10px}
+/* the callout is prose, not a control label — it gets read, so it is set
+   larger and looser than the 12px hints that annotate the switches */
+.group.callout .hint{font-size:14px;line-height:1.5;color:var(--black)}
+.callout-links{
+  display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:14px;
+}
+.callout-links a{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:13px;font-weight:600;color:var(--black);
+  text-decoration:underline;text-underline-offset:3px;
+}
+.callout-links svg{width:15px;height:15px;fill:currentColor;display:block;flex:0 0 auto}
 .group > .label{
   font-size:11px;letter-spacing:.09em;text-transform:uppercase;
   color:var(--on-surface-var);margin-bottom:8px;display:flex;gap:8px;align-items:baseline;
@@ -642,6 +654,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       fun making hundreds of them with it. This design takes slitscans
       further, with more scan modes and effects. A work in progress.
     </p>
+    <div class="callout-links">
+      <a id="lnkSite" href="https://ditongo.com" target="_blank" rel="noopener noreferrer">ditongo.com</a>
+      <a id="lnkMail" href="mailto:bruno@ditongo.com">bruno@ditongo.com</a>
+    </div>
   </div>
 
   <div class="actions">
@@ -694,10 +710,15 @@ const ICON = {
   close:'m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z',
   check:'M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z',
   shutter_speed:'M360-840v-80h240v80H360ZM480-80q-75 0-140.5-28.5T225-186q-49-49-77-114.5T120-440q0-74 28.5-139.5T226-694q49-49 114.5-77.5T480-800q63 0 120 21t104 59l58-58 56 56-56 58q36 47 57 104t21 120q0 74-28 139.5T735-186q-49 49-114.5 77.5T480-80Zm0-360Zm0-80h268q-18-62-61.5-109T584-700L480-520Zm-70 40 134-232q-59-15-121.5-2.5T306-660l104 180Zm-206 80h206L276-632q-42 47-62.5 106.5T204-400Zm172 220 104-180H212q18 62 61.5 109T376-180Zm40 12q66 17 128 1.5T654-220L550-400 416-168Zm268-80q44-48 63.5-107.5T756-480H550l134 232Z',
+  open_in_new:'M120-120v-720h360v80H200v560h560v-280h80v360H120Zm268-212-56-56 372-372H560v-80h280v280h-80v-144L388-332Z',
+  mail:'M80-160v-640h800v640H80Zm400-280L160-640v400h640v-400L480-440Zm0-80 320-200H160l320 200ZM160-640v-80 480-400Z',
 };
 const svg = n => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${ICON[n]}"/></svg>`;
 $('btnTune').innerHTML = svg('settings');   // settings
 $('rateIco').innerHTML = svg('shutter_speed');
+// icons trail their labels, so they're appended rather than prepended
+$('lnkSite').insertAdjacentHTML('beforeend', svg('open_in_new'));
+$('lnkMail').insertAdjacentHTML('afterbegin', svg('mail'));
 $('rollX').innerHTML = svg('close');    // dismiss the roll, no side effects
 
 /* ── canvases ─────────────────────────────────────────────────────── */
