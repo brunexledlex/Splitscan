@@ -87,7 +87,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 
 
 /* ── bottom: the mint bar ─────────────────────────────────────────────
-   The bar now holds only the mode selector — Rate and Anti-aliasing moved
+   The bar now holds only the mode selector — Rate and Warp moved
    up onto the live preview so the selector can have the full width. Four
    shapes need the room more than two side buttons need to sit in the bar. */
 #bar{
@@ -113,7 +113,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 }
 #segMode button[aria-pressed="true"]{background:var(--chip);color:var(--mint)}
 
-/* Rate and Anti-aliasing: floating pills over the image, right above the
+/* Rate and Warp: floating pills over the image, right above the
    bar — the same look they had inside it, just no longer sharing its row. */
 .pill{
   position:fixed;z-index:3;
@@ -123,13 +123,71 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   padding:0 14px;font-size:12px;line-height:15px;white-space:nowrap;
   box-shadow:0 2px 10px rgba(0,0,0,.35);        /* was on solid mint; now on the image */
 }
-#btnRate{left:15px}
+/* Rate sits at the VERTICAL CENTRE, not with the other bottom pills: it is
+   the dial's read point, and the dial needs equal travel above and below
+   it. Anchored at the bottom the way Warp is, dragging down ran out of
+   screen almost immediately and the scrubber only really worked one way. */
+#btnRate{
+  left:15px;top:50%;bottom:auto;transform:translateY(-50%);
+  touch-action:none;
+}
+/* it IS the read point, so it lifts off the dial rather than sitting in it */
+#btnRate.scrubbing{
+  background:var(--chip);
+  box-shadow:0 0 0 1px rgba(206,253,211,.45), 0 2px 14px rgba(0,0,0,.55);
+}
+
+/* Slice scrubber: a dial that runs down into the Rate pill. Drag up for
+   more pixels, down for fewer. THE PILL IS THE READ POINT — it carries the
+   live number, so the dial needs no marker of its own and stays wordless.
+
+   The ticks are a REPEATING GRADIENT rather than elements, which is what
+   makes it read as an infinite dial: a tiled pattern has no first or last
+   tick to run out of, so it fills whatever height the screen gives it and
+   never shows an end. Scrubbing shifts background-position, not a
+   transform. Major/minor tiles are 35px/7px — 5:1, so they stay in phase.
+
+   The read point is the Rate pill at the vertical centre, which is also the
+   dial's bottom edge: 1px (the floor) sits AT the pill, so the whole 1..60
+   range runs upward over exactly half the screen and 60px lands on the top
+   edge. Nothing exists below 1, so there is no dial below the pill either.
+   Tick spacing is therefore a function of viewport height and is set from
+   JS, not here. z-index sits below the pill (3) so the ticks pass behind
+   it — the pill reads as a lens on the dial rather than a label beside it.
+   Pure readout: the pill holds pointer capture for the whole gesture, so
+   this never receives an event itself. */
+#rateScrub{
+  position:fixed;left:0;width:132px;z-index:2;
+  top:0;bottom:50%;                    /* exactly the upper half */
+  pointer-events:none;opacity:0;transition:opacity .12s var(--ease);
+  /* the dial sits over the live image — a scrim keeps mint ticks readable
+     against a bright scene without boxing the dial in */
+  background:linear-gradient(to right, rgba(0,0,0,.45), rgba(0,0,0,0) 76px);
+  /* fades in from the top so the top of the range doesn't collide with the
+     wordmark; solid at the bottom, where the read point is */
+  -webkit-mask-image:linear-gradient(transparent,#000 22%,#000 100%);
+  mask-image:linear-gradient(transparent,#000 22%,#000 100%);
+}
+#rateScrub.on{opacity:1}
+/* background-size is set from JS: the tile has to equal one slice px, which
+   depends on viewport height. The values here are only a pre-measure default */
+#rateTicks{
+  position:absolute;left:15px;top:0;bottom:0;width:21px;
+  background-image:
+    linear-gradient(to bottom, rgba(206,253,211,.4) 0 2px, transparent 2px),
+    linear-gradient(to bottom, rgba(206,253,211,.16) 0 1px, transparent 1px);
+  background-size:21px 42px, 9px 8.5px;
+  background-repeat:repeat-y;
+  will-change:background-position;
+}
+#btnRate svg{width:15px;height:15px;fill:currentColor;display:block}
+#rateIco{display:grid;place-items:center}
 /* same on/off language as the mode pills: dim text at rest, the grey chip
    and bright mint text once it's actually doing something */
 #btnAA{right:15px;color:var(--mint-dim)}
 #btnAA[aria-pressed="true"]{background:var(--chip);color:var(--mint)}
 #btnAA .sm{display:none}
-/* the Figma bar was drawn at 440; below ~420 "Anti-aliasing" cannot sit
+/* the Figma bar was drawn at 440; below ~420 "Warp" cannot sit
    at full width as a floating pill without crowding the shutter */
 @media (max-width:420px){
   #btnAA .lg{display:none}
@@ -177,6 +235,30 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .sheet h2{font-size:16px;font-weight:600;margin:12px 0 2px}
 .sheet .hint{font-size:12px;color:var(--on-surface-var);margin:0 0 10px}
 .group{margin:14px 0}
+/* a white card on the mint sheet: the one block here that is a note rather
+   than a control, so it stops looking like a setting with no switch */
+.group.callout{
+  background:#fff;border-radius:18px;padding:22px 20px;
+  margin:18px 0;
+}
+/* the callout's heading is a byline, not one of the 11px section labels
+   that caption the switches — scoped so those stay as they are */
+.group.callout > .label{
+  margin-bottom:10px;
+  font-size:15px;font-weight:700;letter-spacing:.02em;color:var(--black);
+}
+/* the callout is prose, not a control label — it gets read, so it is set
+   larger and looser than the 12px hints that annotate the switches */
+.group.callout .hint{font-size:14px;line-height:1.5;color:var(--black)}
+.callout-links{
+  display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:14px;
+}
+.callout-links a{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:13px;font-weight:600;color:var(--black);
+  text-decoration:underline;text-underline-offset:3px;
+}
+.callout-links svg{width:15px;height:15px;fill:currentColor;display:block;flex:0 0 auto}
 .group > .label{
   font-size:11px;letter-spacing:.09em;text-transform:uppercase;
   color:var(--on-surface-var);margin-bottom:8px;display:flex;gap:8px;align-items:baseline;
@@ -252,7 +334,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 #rollGrid{
   position:absolute;inset:0;z-index:1;background:#000;
   display:flex;flex-direction:column;justify-content:center;gap:10px;
-  padding:110px 0 112px;                 /* clears the floating header/Save */
+  padding:110px 12px 112px;              /* clears the floating header/Save */
   overflow-y:auto;overscroll-behavior:contain;
   -webkit-overflow-scrolling:touch;
 }
@@ -279,23 +361,43 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   transition:box-shadow .1s var(--ease);
 }
 .thumb[aria-pressed="true"]::after{box-shadow:inset 0 0 0 3px #fff}
+/* selection tick, top-left. Sits above the ring's ::after, and scales in
+   rather than appearing flat, so a tap reads as a state change */
+.thumb .tick{
+  position:absolute;top:10px;left:10px;z-index:2;
+  width:24px;height:24px;border-radius:50%;
+  display:grid;place-items:center;pointer-events:none;
+  background:#fff;color:var(--black);
+  box-shadow:0 1px 5px rgba(0,0,0,.5);
+  opacity:0;transform:scale(.6);
+  transition:opacity .11s var(--ease),transform .11s var(--ease);
+}
+.thumb .tick svg{width:16px;height:16px;fill:currentColor;display:block}
+.thumb[aria-pressed="true"] .tick{opacity:1;transform:scale(1)}
 .cpill:disabled{opacity:.4}
 /* the primary action reads as one: taller, bolder, larger type */
 .cpill.primary{
   background:var(--mint);color:var(--black);
   height:52px;font-size:16px;font-weight:700;border-radius:26px;
 }
-/* floats over the ribbon at the same on-screen spot the old inset card put
-   it — same 48px offset (32px card inset + 16px padding), plus the 15dvh
-   the container now overhangs past the viewport's bottom edge */
-#rollSave{position:absolute;bottom:calc(15dvh + 48px);left:12px;right:12px;z-index:2}
+/* sized to its label and centred on the SCREEN, not on the tilted card —
+   which is why it lives outside that card in the markup. z-index 6 clears
+   the card (5) and the scrim (4), staying under the long-press preview (7) */
+#rollSave{
+  position:fixed;left:50%;bottom:calc(var(--safe-b) + 40px);z-index:6;
+  transform:translateX(-50%) translateY(6px);
+  width:auto;padding:0 44px;
+  opacity:0;pointer-events:none;
+  transition:opacity .16s var(--ease),transform .16s var(--ease);
+}
+#rollSave.on{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
 
 /* header row: title + Clear all + the dismiss-only close */
 /* floats over the ribbon at the same on-screen spot the old inset card put
    it; its own solid+blurred backing keeps the title legible over whatever
    is scrolling behind it. Same +15dvh top-overhang compensation as rollSave */
 .roll-head{
-  position:absolute;top:calc(15dvh + 48px);left:12px;right:12px;z-index:2;
+  position:absolute;top:calc(15dvh + 48px);left:18px;right:18px;z-index:2;
   display:flex;align-items:center;justify-content:space-between;gap:8px;
   background:rgba(0,0,0,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   padding:10px 12px;border-radius:14px;
@@ -382,17 +484,21 @@ input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(
 input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--primary);border:0}
 
 /* M3 snackbar */
+/* sits at the top, clear of the topbar, and slides DOWN in — the bottom of
+   the screen is now crowded with the pills, shutter and mode bar */
 #snack{
-  position:fixed;left:16px;right:16px;bottom:calc(var(--safe-b) + 108px);z-index:6;
+  position:fixed;left:50%;width:80%;top:calc(var(--safe-t) + 76px);z-index:6;
   /* white, not the mint-surface ink: the toast sits on dark grey, where
      black text was near-illegible after the rebrand */
   background:var(--s-container-highest);color:#FFFFFF;
   border-radius:8px;padding:14px 16px;font-size:14px;
   box-shadow:0 3px 14px rgba(0,0,0,.5);
-  opacity:0;transform:translateY(8px);pointer-events:none;
+  /* translateX(-50%) is the centring, not animation — it has to be carried
+     on BOTH states or the toast jumps half its width when it opens */
+  opacity:0;transform:translateX(-50%) translateY(-8px);pointer-events:none;
   transition:opacity .2s var(--ease),transform .2s var(--ease);
 }
-#snack.on{opacity:1;transform:translateY(0)}
+#snack.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){
   *{transition-duration:.01ms !important;animation-duration:.01ms !important}
 }
@@ -430,15 +536,18 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <!-- floating over the live preview, right above the bar, so the mode
      selector below can have the bar to itself -->
-<button class="pill" id="btnRate">Rate <span id="rateVal">1</span></button>
-<button id="btnAA" class="pill" aria-pressed="false" aria-label="Anti-aliasing"><span
-  class="lg">Anti-aliasing</span><span class="sm">AA</span></button>
+<div id="rateScrub" aria-hidden="true">
+  <div id="rateTicks"></div>
+</div>
+<button class="pill" id="btnRate" aria-label="Slice thickness — drag to change, tap to reset"
+  ><span id="rateIco"></span><span id="rateVal">1</span> px</button>
+<button id="btnAA" class="pill" aria-pressed="false" aria-label="Warp"><span
+  class="lg">Warp</span><span class="sm">Warp</span></button>
 
 <div id="bar">
   <div id="segMode" role="group" aria-label="Geometry">
     <button data-mode="swipe">Swipe</button>
     <button data-mode="burst" aria-pressed="true">Burst</button>
-    <button data-mode="field">Field</button>
     <button data-mode="strip">Strip</button>
   </div>
 </div>
@@ -460,14 +569,15 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
 
   <div class="group">
-    <div class="label"><span>Anti-aliasing</span><output id="oAAmem"></output></div>
-    <div class="seg" id="segAA" role="group" aria-label="Anti-aliasing">
+    <div class="label"><span>Warp</span><output id="oAAmem"></output></div>
+    <div class="seg" id="segAA" role="group" aria-label="Warp">
       <button data-aa="off" aria-pressed="true">Off</button>
       <button data-aa="on">On</button>
     </div>
     <p class="hint" id="aaHint" style="margin:8px 0 0">
-      Samples a rolling buffer of past frames with sub-pixel and sub-frame
-      interpolation. Not available in Strip — it has no fixed time depth.
+      Re-renders the whole frame every tick from a rolling buffer of past
+      frames — a live, warped window into the last few seconds, not a
+      smoothing filter. Not available in Strip — it has no fixed time depth.
     </p>
   </div>
 
@@ -492,14 +602,15 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 
   <div class="group">
-    <div class="label"><span id="lSlice">Slice</span><output id="oSlice">2 px</output></div>
-    <div class="seg" id="segSlice" role="group" aria-label="Slice thickness">
-      <button data-slice="1">1</button>
-      <button data-slice="2" aria-pressed="true">2</button>
-      <button data-slice="4">4</button>
-      <button data-slice="8">8</button>
-      <button data-slice="16">16</button>
+    <div class="label"><span>Smoothing</span></div>
+    <div class="seg" id="segSmooth" role="group" aria-label="Smoothing">
+      <button data-smooth="on" aria-pressed="true">On</button>
+      <button data-smooth="off">Off</button>
     </div>
+    <p class="hint" style="margin:8px 0 0">
+      Feathers the edge of every slice as it's painted, so the seam between
+      one instant and the next blends instead of stepping. Works in every mode.
+    </p>
   </div>
 
   <button class="chip" id="btnAdvanced" aria-expanded="false"
@@ -541,13 +652,17 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     </div>
   </div>
 
-  <div class="group">
+  <div class="group callout">
     <div class="label"><span>Ditongo</span></div>
     <p class="hint" style="margin:0">
-      Many years ago I made an iOS app that made slitscans, and I had a lot of
+      Many years ago I had an iOS app that made slitscans, and I had a lot of
       fun making hundreds of them with it. This design takes slitscans
       further, with more scan modes and effects. A work in progress.
     </p>
+    <div class="callout-links">
+      <a id="lnkSite" href="https://ditongo.com" target="_blank" rel="noopener noreferrer">ditongo.com</a>
+      <a id="lnkMail" href="mailto:bruno@ditongo.com">bruno@ditongo.com</a>
+    </div>
   </div>
 
   <div class="actions">
@@ -564,8 +679,11 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     </div>
   </div>
   <div id="rollGrid"></div>
-  <button class="cpill primary" id="rollSave">Save</button>
 </div>
+<!-- outside the card on purpose: the card is rotated 5deg, and a transformed
+     ancestor becomes the containing block even for position:fixed, so a Save
+     button left inside it could never sit upright and centred on the SCREEN -->
+<button class="cpill primary" id="rollSave">Save</button>
 
 <!-- long-press a thumbnail: the real capture, uncropped, closes on finger up -->
 <div id="rollPreview" class="roll-preview" aria-hidden="true">
@@ -595,9 +713,17 @@ const ICON = {
   aspect_ratio:'M560-280h200v-200h-80v120H560v80ZM200-480h80v-120h120v-80H200v200ZM80-160v-640h800v640H80Zm80-80h640v-480H160v480Zm0 0v-480 480Z',
   crop_free:'M120-120v-240h80v160h160v80H120Zm480 0v-80h160v-160h80v240H600ZM120-600v-240h240v80H200v160h-80Zm640 0v-160H600v-80h240v240h-80Z',
   close:'m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z',
+  check:'M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z',
+  shutter_speed:'M360-840v-80h240v80H360ZM480-80q-75 0-140.5-28.5T225-186q-49-49-77-114.5T120-440q0-74 28.5-139.5T226-694q49-49 114.5-77.5T480-800q63 0 120 21t104 59l58-58 56 56-56 58q36 47 57 104t21 120q0 74-28 139.5T735-186q-49 49-114.5 77.5T480-80Zm0-360Zm0-80h268q-18-62-61.5-109T584-700L480-520Zm-70 40 134-232q-59-15-121.5-2.5T306-660l104 180Zm-206 80h206L276-632q-42 47-62.5 106.5T204-400Zm172 220 104-180H212q18 62 61.5 109T376-180Zm40 12q66 17 128 1.5T654-220L550-400 416-168Zm268-80q44-48 63.5-107.5T756-480H550l134 232Z',
+  open_in_new:'M120-120v-720h360v80H200v560h560v-280h80v360H120Zm268-212-56-56 372-372H560v-80h280v280h-80v-144L388-332Z',
+  mail:'M80-160v-640h800v640H80Zm400-280L160-640v400h640v-400L480-440Zm0-80 320-200H160l320 200ZM160-640v-80 480-400Z',
 };
 const svg = n => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${ICON[n]}"/></svg>`;
 $('btnTune').innerHTML = svg('settings');   // settings
+$('rateIco').innerHTML = svg('shutter_speed');
+// icons trail their labels, so they're appended rather than prepended
+$('lnkSite').insertAdjacentHTML('beforeend', svg('open_in_new'));
+$('lnkMail').insertAdjacentHTML('afterbegin', svg('mail'));
 $('rollX').innerHTML = svg('close');    // dismiss the roll, no side effects
 
 /* ── canvases ─────────────────────────────────────────────────────── */
@@ -609,13 +735,15 @@ let state = 'idle';                    // idle | scanning | export
 
 const S = {
   mode:'burst', angle:0, slice:1, dir:'right', bandW:0.10, capture:'screen', autoSave:true,
-  cx:.5, cy:.5, reverse:false, guides:true, manual:false,
+  cx:.5, cy:.5, reverse:false, guides:true, manual:false, smooth:true,
 };
+const FEATHER = 3;   // px (device-res canvas units) softened at each slice edge
 const RATE = { swipe:200, burst:240, field:200 };   // px/s, fixed per shape
 const src = { el:null, w:0, h:0, kind:null, mirror:false, stream:null, facing:'environment' };
 
 let sweepS = 0, sweepPrev = 0, ringR = 0, ringPrev = 0, fieldD = 0, fieldPrev = 0;
 let stripCv = null, sxc = null, stripX = 0, stripAcc = 0, stripCap = 0;   // Strip's own wide buffer
+let fthCv = null, fx = null;               // Smoothing: full-frame scratch for Swipe/Field/Burst
 let passComplete = false;
 let last = 0, glow = 0, glowTarget = 0;            // barrel ghosting
 
@@ -709,18 +837,58 @@ function maxRadius(){
 const bandHalf = () => S.bandW * Math.min(W,H);
 const fieldMax = () => sweepLength()/2;
 
-/* clip the strip between two signed distances along the band normal */
+function ensureFeather(){
+  if (fthCv && fthCv.width === W && fthCv.height === H) return;
+  fthCv = document.createElement('canvas');
+  fthCv.width = W; fthCv.height = H;
+  fx = fthCv.getContext('2d');
+}
+
+/* clip the strip between two signed distances along the band normal.
+
+   Smoothing can't just soften this slice's own edge: consecutive slices sit
+   side by side, so fading the boundary would expose the empty canvas rather
+   than the previous exposure. Instead the slice is EXTENDED backwards by
+   FEATHER px so it genuinely overlaps its predecessor, painted to a scratch
+   canvas, alpha-ramped 0→1 across that overlap (destination-in multiplies
+   the drawn pixels' alpha), and blended over the accumulation buffer — a
+   real cross-fade between the two moments. */
 function paintBand(s0, s1){
   const th = S.angle*DEG, nx = -Math.sin(th), ny = Math.cos(th);
   const dxv = Math.cos(th), dyv = Math.sin(th), D = Math.hypot(W,H);
   const cx = W/2, cy = H/2;
-  ax.save(); ax.beginPath();
-  ax.moveTo(cx+nx*s0-dxv*D, cy+ny*s0-dyv*D);
-  ax.lineTo(cx+nx*s0+dxv*D, cy+ny*s0+dyv*D);
-  ax.lineTo(cx+nx*s1+dxv*D, cy+ny*s1+dyv*D);
-  ax.lineTo(cx+nx*s1-dxv*D, cy+ny*s1-dyv*D);
-  ax.closePath(); ax.clip();
-  drawSource(ax); ax.restore();
+  const band = (c, a, b) => {
+    c.beginPath();
+    c.moveTo(cx+nx*a-dxv*D, cy+ny*a-dyv*D);
+    c.lineTo(cx+nx*a+dxv*D, cy+ny*a+dyv*D);
+    c.lineTo(cx+nx*b+dxv*D, cy+ny*b+dyv*D);
+    c.lineTo(cx+nx*b-dxv*D, cy+ny*b-dyv*D);
+    c.closePath();
+  };
+  if (!S.smooth){
+    ax.save(); band(ax, s0, s1); ax.clip();
+    drawSource(ax); ax.restore();
+    return;
+  }
+  // trailing edge depends on which way the slit is travelling
+  const back  = dir() > 0 ? s0 : s1;
+  const front = dir() > 0 ? s1 : s0;
+  const ext   = back - (dir() > 0 ? FEATHER : -FEATHER);
+
+  ensureFeather();
+  fx.clearRect(0,0,W,H);
+  fx.save(); band(fx, ext, front); fx.clip();
+  drawSource(fx); fx.restore();
+
+  fx.save();
+  fx.globalCompositeOperation = 'destination-in';
+  const g = fx.createLinearGradient(cx+nx*ext, cy+ny*ext, cx+nx*back, cy+ny*back);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,1)');    // clamps opaque past `back`
+  fx.fillStyle = g; fx.fillRect(0,0,W,H);
+  fx.restore();
+
+  ax.drawImage(fthCv, 0, 0);
 }
 
 function passProgress(){
@@ -769,10 +937,39 @@ function stepBurst(dt){
   r0 = Math.max(r0, 0);
   if (r1 <= 0) return;
   const px = S.cx*W, py = S.cy*H;
-  ax.save(); ax.beginPath();
-  ax.arc(px,py,r1,0,TAU);
-  if (r0 > 0) ax.arc(px,py,r0,0,TAU,true);   // counter-wound: a ring, not a disc
-  ax.clip(); drawSource(ax); ax.restore();
+  const ring = (c, a, b) => {           // b outer, a inner; counter-wound
+    c.beginPath();
+    c.arc(px,py,b,0,TAU);
+    if (a > 0) c.arc(px,py,a,0,TAU,true);
+  };
+  // an expanding ring trails at r0, a contracting one at r1. Feathering is
+  // skipped while an expanding ring is still at the pivot: extending it
+  // inward past 0 would fade out the one point every Burst shares.
+  const atPivot = dir() > 0 && r0 <= FEATHER;
+  if (!S.smooth || atPivot){
+    ax.save(); ring(ax, r0, r1); ax.clip();
+    drawSource(ax); ax.restore();
+    return;
+  }
+  const back = dir() > 0 ? r0 : r1;
+  const ext  = dir() > 0 ? r0 - FEATHER : r1 + FEATHER;
+
+  ensureFeather();
+  fx.clearRect(0,0,W,H);
+  fx.save();
+  ring(fx, Math.min(ext,r0), Math.max(ext,r1));
+  fx.clip(); drawSource(fx); fx.restore();
+
+  fx.save();
+  fx.globalCompositeOperation = 'destination-in';
+  const g = fx.createRadialGradient(px,py,Math.max(Math.min(ext,back),0),
+                                    px,py,Math.max(Math.max(ext,back),0.01));
+  g.addColorStop(0, dir() > 0 ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,1)');
+  g.addColorStop(1, dir() > 0 ? 'rgba(0,0,0,1)' : 'rgba(0,0,0,0)');
+  fx.fillStyle = g; fx.fillRect(0,0,W,H);
+  fx.restore();
+
+  ax.drawImage(fthCv, 0, 0);
 }
 
 /* Field: a live band in the middle, two slits running outward from it in
@@ -800,9 +997,9 @@ function stepField(dt){
    GROWING: one column sampled from that fixed edge is appended per frame,
    the actual photo-finish technique. Unbounded, so it needs its own wide
    buffer rather than the shared W×H canvas, sized off the same
-   device-resolution ceiling the rest of capture already uses — and it is
-   the one shape anti-aliasing cannot reach, because there is no fixed
-   time depth to sample. */
+   device-resolution ceiling the rest of capture already uses. Its slice
+   edge is already axis-aligned, so Smoothing just erases a gradient down
+   the new column's left edge, letting the previous column show through. */
 function computeStripCap(h){
   const byArea = Math.floor(MAX_AREA / Math.max(h,1));
   return clamp(byArea, 1280, MAX_LONG);
@@ -837,13 +1034,31 @@ function stepStrip(dt){
     if (stripX + adv >= stripCap){
       passComplete = true;
     } else {
-      // clip to the new slot, then shift the WHOLE live frame left so its
-      // own right edge lands exactly on that slot — the fixed source column
-      sxc.save();
-      sxc.beginPath(); sxc.rect(stripX, 0, adv, H); sxc.clip();
-      sxc.translate(stripX + adv - W, 0);
-      drawSource(sxc);
-      sxc.restore();
+      const F = S.smooth ? Math.min(FEATHER, stripX) : 0;
+      if (!F){
+        // clip to the new slot, then shift the WHOLE live frame left so its
+        // own right edge lands exactly on that slot — the fixed source column
+        sxc.save();
+        sxc.beginPath(); sxc.rect(stripX, 0, adv, H); sxc.clip();
+        sxc.translate(stripX + adv - W, 0);
+        drawSource(sxc);
+        sxc.restore();
+      } else {
+        // same column, widened F px to the left so it overlaps the column
+        // already there, then alpha-ramped across that overlap and blended
+        // on — the strip's own cross-fade between consecutive instants
+        ensureFeather();
+        fx.clearRect(0,0,W,H);
+        drawSource(fx);
+        fx.save();
+        fx.globalCompositeOperation = 'destination-in';
+        const g = fx.createLinearGradient(W-adv-F, 0, W-adv, 0);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(1, 'rgba(0,0,0,1)');
+        fx.fillStyle = g; fx.fillRect(0,0,W,H);
+        fx.restore();
+        sxc.drawImage(fthCv, W-adv-F, 0, adv+F, H, stripX-F, 0, adv+F, H);
+      }
       stripX += adv;
     }
   }
@@ -965,7 +1180,7 @@ function drawHud(){
    tick, re-renders the whole image: each pixel samples the buffer at a
    time depth derived from the slit geometry.
 
-   Spatial anti-aliasing is hardware bilinear (LINEAR on S,T). Sub-frame
+   Spatial softness is hardware bilinear (LINEAR on S,T). Sub-frame
    temporal blending is done explicitly with two taps and a mix, because
    the ring buffer's seam puts the newest frame next to the oldest and
    hardware filtering across R would blend unrelated moments there.
@@ -1065,7 +1280,7 @@ function aaInit(){
     preserveDrawingBuffer:true,      // export reads the drawing buffer back
     powerPreference:'high-performance',
   });
-  if (!gl){ snack('This browser has no WebGL2 — anti-aliasing unavailable.', 5000); return false; }
+  if (!gl){ snack('This browser has no WebGL2 — Warp unavailable.', 5000); return false; }
   AA.gl = gl;
 
   try{
@@ -1081,7 +1296,7 @@ function aaInit(){
       AA.u[n] = gl.getUniformLocation(p, n);
     AA.vao = gl.createVertexArray();
   } catch(e){
-    snack('Anti-aliasing shader failed: ' + e.message, 6000);
+    snack('Warp shader failed: ' + e.message, 6000);
     AA.gl = null; return false;
   }
 
@@ -1089,7 +1304,7 @@ function aaInit(){
   // would go black and stay black
   $('gl').addEventListener('webglcontextlost', e => {
     e.preventDefault(); AA.lost = true;
-    snack('Graphics context lost — anti-aliasing paused.', 4000);
+    snack('Graphics context lost — Warp paused.', 4000);
     aaSetOn(false);
   });
   $('gl').addEventListener('webglcontextrestored', () => {
@@ -1241,7 +1456,7 @@ function aaSyncLabels(){
 $('segAA').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.aa === 'on' && S.mode === 'strip'){
-    snack('Strip has no fixed time depth — use Swipe, Burst or Field.', 4000); return;
+    snack('Strip has no fixed time depth — use Swipe or Burst.', 4000); return;
   }
   aaSetOn(b.dataset.aa === 'on');
 });
@@ -1505,12 +1720,13 @@ async function openRoll(){
     b.setAttribute('aria-pressed','false');
     b.setAttribute('aria-label', r.name);
     b.dataset.name = r.name;
-    b.innerHTML = `<img src="${url}" alt="">`;
+    b.innerHTML = `<img src="${url}" alt=""><span class="tick">${svg('check')}</span>`;
     wireThumbPress(b, url);
     grid.appendChild(b);
   }
   $('rollSave').disabled = all.length === 0;
   openSheet('sheetRoll');
+  $('rollSave').classList.add('on');   // after openSheet — it clears everything first
 }
 const rollSelected = () =>
   [...document.querySelectorAll('#rollGrid .thumb[aria-pressed="true"]')].map(b => b.dataset.name);
@@ -1555,6 +1771,7 @@ function openSheet(id){
 }
 function closeSheets(){
   document.querySelectorAll('.sheet, .card').forEach(s => s.classList.remove('on'));
+  $('rollSave').classList.remove('on');   // lives outside the card, so not covered above
   $('scrim').classList.remove('on');
   closePreview();
 }
@@ -1583,24 +1800,22 @@ $('shutter').addEventListener('click', () => {
 $('segMode').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   S.mode = b.dataset.mode; applyMode();
-  if (S.mode === 'strip' && AA.on) snack('Anti-aliasing is unavailable in Strip.', 2200);
-});
-$('segSlice').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
-  setSlice(+b.dataset.slice);
+  if (S.mode === 'strip' && AA.on) snack('Warp is unavailable in Strip.', 2200);
 });
 $('sSlice').addEventListener('input', e => setSlice(+e.target.value, true));
 function setSlice(v){
   S.slice = clamp(Math.round(v), 1, 60);
-  press($('segSlice'),'slice',S.slice);
   $('sSlice').value = S.slice;
-  $('oSlice').textContent = S.slice + ' px';
   $('oSliceFine').textContent = S.slice;
   $('rateVal').textContent = S.slice;          // the bar pill
 }
 $('segGuides').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   S.guides = b.dataset.guides === 'on'; press($('segGuides'),'guides',b.dataset.guides);
+});
+$('segSmooth').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.smooth = b.dataset.smooth === 'on'; press($('segSmooth'),'smooth',b.dataset.smooth);
 });
 $('segAuto').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -1630,8 +1845,6 @@ function applyMode(){
   if (typeof aaEligible === 'function'){
     $('gl').hidden = !aaEligible(); $('acc').hidden = !!aaEligible();
   }
-  $('lSlice').textContent =
-    S.mode==='burst' ? 'Ring' : S.mode==='field' ? 'Edge' : S.mode==='strip' ? 'Feed' : 'Slit';
   $('sSlice').max = 60;
   setSlice(clamp(S.slice, 1, +$('sSlice').max));
   // Strip has no centre to grab; the other three shapes still get one
@@ -1787,14 +2000,77 @@ async function useCamera(facing, quiet){
     throw e;
   }
 }
-/* Slice thickness cycles straight off the bar: 1 · 2 · 4 · 8 · 16 */
-const RATES = [1,2,4,8,16];
-$('btnRate').addEventListener('click', () => {
-  const i = RATES.indexOf(S.slice);
-  setSlice(RATES[(i < 0 ? 0 : i + 1) % RATES.length]);
-});
+/* Slice thickness scrubs straight off the bar. Press the pill and a vertical
+   ruler rides under a fixed centre marker: drag up for more pixels, down for
+   fewer, applied live so the scan responds under your thumb. Release commits
+   wherever you left it. A tap with no drag resets to 1px.
+   The ruler carries values, not presets — every integer 1..60 is reachable,
+   which is the whole 60-stop range the settings sheet exposes. */
+const SLICE_MIN = 1, SLICE_MAX = 60;
+const SCRUB_SLOP = 5;         // px before a press counts as a drag, not a tap
+/* px of thumb travel per 1px of slice. Derived, not chosen: the range has to
+   span exactly half the screen so 1px sits at the pill and 60px lands on the
+   top edge, which makes it a function of viewport height. */
+let slicePPU = 8.5;
 
-/* Anti-aliasing toggles from the bar; the sheet keeps its own control
+/* raw (unrounded) drives the dial so it glides between integers. Shifting
+   the tiled pattern up as the value rises means bigger values arrive from
+   below — the dial tracks the thumb instead of opposing it. Only the phase
+   within one 35px tile is ever visible, so the dial keeps turning smoothly
+   with no seam and no ends; the VALUE still clamps to 1..60 at the edges.
+
+   The dial's box is NOT symmetric about the screen centre (it clears the
+   wordmark up top but only 32px at the bottom), so the pattern is pinned to
+   the pill's own centre rather than to the box's midpoint — otherwise the
+   tick standing for the current value drifts off the read point. Measured
+   once per gesture: a layout read on every pointermove would be wasteful. */
+let scrubRead = 0;
+function measureRead(){
+  // full range across half the screen — so a drag from the pill to the top
+  // edge is exactly 1px -> 60px, whatever the device height
+  slicePPU = (innerHeight/2) / (SLICE_MAX - SLICE_MIN);
+  // one minor tile IS one slice px, majors every 5, or the ticks would stop
+  // meaning anything once spacing became viewport-dependent
+  $('rateTicks').style.backgroundSize =
+    `21px ${slicePPU*5}px, 9px ${slicePPU}px`;
+  scrubRead = innerHeight/2 - $('rateScrub').getBoundingClientRect().top;
+}
+function scrubTo(raw){
+  const y = scrubRead - (raw - SLICE_MIN) * slicePPU;
+  $('rateTicks').style.backgroundPosition = `0 ${y}px, 0 ${y}px`;
+}
+
+let scrubY = 0, scrubFrom = 1, scrubMoved = false, scrubbing = false;
+const rateBtn = $('btnRate');
+
+rateBtn.addEventListener('pointerdown', ev => {
+  ev.preventDefault();                                    // no synthetic click after
+  try{ rateBtn.setPointerCapture(ev.pointerId); } catch(e){}   // throws on synthetic events
+  scrubbing = true; scrubMoved = false;
+  scrubY = ev.clientY; scrubFrom = S.slice;
+  measureRead();
+  scrubTo(S.slice);
+  $('rateScrub').classList.add('on');
+  rateBtn.classList.add('scrubbing');
+});
+rateBtn.addEventListener('pointermove', ev => {
+  if (!scrubbing) return;
+  const dy = scrubY - ev.clientY;                         // up is positive
+  if (Math.abs(dy) > SCRUB_SLOP) scrubMoved = true;
+  // always measured from the press, never accumulated, so it can't drift
+  const raw = clamp(scrubFrom + dy/slicePPU, SLICE_MIN, SLICE_MAX);
+  scrubTo(raw);
+  setSlice(raw);                                          // rounds + syncs every surface
+});
+['pointerup','pointercancel'].forEach(t => rateBtn.addEventListener(t, () => {
+  if (!scrubbing) return;
+  scrubbing = false;
+  $('rateScrub').classList.remove('on');
+  rateBtn.classList.remove('scrubbing');
+  if (!scrubMoved){ setSlice(1); scrubTo(1); }            // tap resets
+}));
+
+/* Warp toggles from the bar; the sheet keeps its own control
    as the accessible twin, and both stay in sync through aaSetOn */
 $('btnAA').addEventListener('click', () => {
   aaSetOn(!AA.on);
