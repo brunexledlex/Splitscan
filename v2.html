@@ -241,7 +241,12 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   background:#fff;border-radius:18px;padding:22px 20px;
   margin:18px 0;
 }
-.group.callout > .label{margin-bottom:10px}
+/* the callout's heading is a byline, not one of the 11px section labels
+   that caption the switches — scoped so those stay as they are */
+.group.callout > .label{
+  margin-bottom:10px;
+  font-size:15px;font-weight:700;letter-spacing:.02em;color:var(--black);
+}
 /* the callout is prose, not a control label — it gets read, so it is set
    larger and looser than the 12px hints that annotate the switches */
 .group.callout .hint{font-size:14px;line-height:1.5;color:var(--black)}
