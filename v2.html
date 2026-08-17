@@ -496,7 +496,6 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <div id="segMode" role="group" aria-label="Geometry">
     <button data-mode="swipe">Swipe</button>
     <button data-mode="burst" aria-pressed="true">Burst</button>
-    <button data-mode="field">Field</button>
     <button data-mode="strip">Strip</button>
   </div>
 </div>
@@ -1401,7 +1400,7 @@ function aaSyncLabels(){
 $('segAA').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.aa === 'on' && S.mode === 'strip'){
-    snack('Strip has no fixed time depth — use Swipe, Burst or Field.', 4000); return;
+    snack('Strip has no fixed time depth — use Swipe or Burst.', 4000); return;
   }
   aaSetOn(b.dataset.aa === 'on');
 });
