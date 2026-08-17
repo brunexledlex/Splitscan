@@ -123,7 +123,50 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   padding:0 14px;font-size:12px;line-height:15px;white-space:nowrap;
   box-shadow:0 2px 10px rgba(0,0,0,.35);        /* was on solid mint; now on the image */
 }
-#btnRate{left:15px}
+#btnRate{left:15px;touch-action:none}
+#btnRate.scrubbing{background:var(--chip)}
+
+/* Slice scrubber: a dial riding under a fixed centre marker, the way a
+   camera's EV scale does. Drag up for more pixels, down for fewer; the
+   pill carries the number, so the dial itself stays wordless.
+
+   The ticks are a REPEATING GRADIENT rather than elements, which is what
+   makes it read as an infinite dial: a tiled pattern has no first or last
+   tick to run out of, so it fills whatever height the screen gives it and
+   never shows an end. Scrubbing shifts background-position, not a
+   transform. Major/minor tiles are 35px/7px — 5:1, so they stay in phase.
+
+   Spans from below the wordmark to the same 32px inset at the bottom.
+   Pure readout: the pill holds pointer capture for the whole gesture, so
+   this never receives an event itself. */
+#rateScrub{
+  position:fixed;left:0;width:132px;z-index:4;
+  top:calc(var(--safe-t) + 73px);      /* wordmark bottom (safe-t + 41) + 32 */
+  bottom:32px;
+  pointer-events:none;opacity:0;transition:opacity .12s var(--ease);
+  /* the dial sits over the live image — a scrim keeps mint ticks readable
+     against a bright scene without boxing the dial in */
+  background:linear-gradient(to right, rgba(0,0,0,.5), rgba(0,0,0,0) 76px);
+  -webkit-mask-image:linear-gradient(transparent,#000 14%,#000 86%,transparent);
+  mask-image:linear-gradient(transparent,#000 14%,#000 86%,transparent);
+}
+#rateScrub.on{opacity:1}
+#rateTicks{
+  position:absolute;left:15px;top:0;bottom:0;width:21px;
+  background-image:
+    linear-gradient(to bottom, rgba(206,253,211,.75) 0 2px, transparent 2px),
+    linear-gradient(to bottom, rgba(206,253,211,.34) 0 2px, transparent 2px);
+  background-size:21px 35px, 11px 7px;
+  background-repeat:repeat-y;
+  will-change:background-position;
+}
+/* reaches well past the longest tick (21px) so the read-point is never
+   mistaken for just another major tick */
+#rateMark{
+  position:absolute;left:15px;top:50%;width:48px;height:3px;
+  transform:translateY(-50%);background:var(--mint);border-radius:2px;
+  box-shadow:0 0 10px rgba(206,253,211,.9), 0 0 2px rgba(0,0,0,.9);
+}
 /* same on/off language as the mode pills: dim text at rest, the grey chip
    and bright mint text once it's actually doing something */
 #btnAA{right:15px;color:var(--mint-dim)}
@@ -382,17 +425,21 @@ input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(
 input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--primary);border:0}
 
 /* M3 snackbar */
+/* sits at the top, clear of the topbar, and slides DOWN in — the bottom of
+   the screen is now crowded with the pills, shutter and mode bar */
 #snack{
-  position:fixed;left:16px;right:16px;bottom:calc(var(--safe-b) + 108px);z-index:6;
+  position:fixed;left:50%;width:80%;top:calc(var(--safe-t) + 76px);z-index:6;
   /* white, not the mint-surface ink: the toast sits on dark grey, where
      black text was near-illegible after the rebrand */
   background:var(--s-container-highest);color:#FFFFFF;
   border-radius:8px;padding:14px 16px;font-size:14px;
   box-shadow:0 3px 14px rgba(0,0,0,.5);
-  opacity:0;transform:translateY(8px);pointer-events:none;
+  /* translateX(-50%) is the centring, not animation — it has to be carried
+     on BOTH states or the toast jumps half its width when it opens */
+  opacity:0;transform:translateX(-50%) translateY(-8px);pointer-events:none;
   transition:opacity .2s var(--ease),transform .2s var(--ease);
 }
-#snack.on{opacity:1;transform:translateY(0)}
+#snack.on{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (prefers-reduced-motion:reduce){
   *{transition-duration:.01ms !important;animation-duration:.01ms !important}
 }
@@ -430,7 +477,12 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 
 <!-- floating over the live preview, right above the bar, so the mode
      selector below can have the bar to itself -->
-<button class="pill" id="btnRate">Rate <span id="rateVal">1</span></button>
+<div id="rateScrub" aria-hidden="true">
+  <div id="rateTicks"></div>
+  <div id="rateMark"></div>
+</div>
+<button class="pill" id="btnRate" aria-label="Slice thickness — drag to change, tap to reset"
+  >Rate <span id="rateVal">1</span> px</button>
 <button id="btnAA" class="pill" aria-pressed="false" aria-label="Warp"><span
   class="lg">Warp</span><span class="sm">Warp</span></button>
 
@@ -1893,12 +1945,54 @@ async function useCamera(facing, quiet){
     throw e;
   }
 }
-/* Slice thickness cycles straight off the bar: 1 · 2 · 4 · 8 · 16 */
-const RATES = [1,2,4,8,16];
-$('btnRate').addEventListener('click', () => {
-  const i = RATES.indexOf(S.slice);
-  setSlice(RATES[(i < 0 ? 0 : i + 1) % RATES.length]);
+/* Slice thickness scrubs straight off the bar. Press the pill and a vertical
+   ruler rides under a fixed centre marker: drag up for more pixels, down for
+   fewer, applied live so the scan responds under your thumb. Release commits
+   wherever you left it. A tap with no drag resets to 1px.
+   The ruler carries values, not presets — every integer 1..60 is reachable,
+   which is the whole 60-stop range the settings sheet exposes. */
+const SLICE_MIN = 1, SLICE_MAX = 60;
+const SLICE_PPU = 7;          // px of thumb travel per 1px of slice
+const SCRUB_SLOP = 5;         // px before a press counts as a drag, not a tap
+
+/* raw (unrounded) drives the dial so it glides between integers. Shifting
+   the tiled pattern up as the value rises means bigger values arrive from
+   below — the dial tracks the thumb instead of opposing it. Only the phase
+   within one 35px tile is ever visible, so the dial keeps turning smoothly
+   with no seam and no ends; the VALUE still clamps to 1..60 at the edges. */
+function scrubTo(raw){
+  const y = -(raw - SLICE_MIN) * SLICE_PPU;
+  $('rateTicks').style.backgroundPosition = `0 ${y}px, 0 ${y}px`;
+}
+
+let scrubY = 0, scrubFrom = 1, scrubMoved = false, scrubbing = false;
+const rateBtn = $('btnRate');
+
+rateBtn.addEventListener('pointerdown', ev => {
+  ev.preventDefault();                                    // no synthetic click after
+  try{ rateBtn.setPointerCapture(ev.pointerId); } catch(e){}   // throws on synthetic events
+  scrubbing = true; scrubMoved = false;
+  scrubY = ev.clientY; scrubFrom = S.slice;
+  scrubTo(S.slice);
+  $('rateScrub').classList.add('on');
+  rateBtn.classList.add('scrubbing');
 });
+rateBtn.addEventListener('pointermove', ev => {
+  if (!scrubbing) return;
+  const dy = scrubY - ev.clientY;                         // up is positive
+  if (Math.abs(dy) > SCRUB_SLOP) scrubMoved = true;
+  // always measured from the press, never accumulated, so it can't drift
+  const raw = clamp(scrubFrom + dy/SLICE_PPU, SLICE_MIN, SLICE_MAX);
+  scrubTo(raw);
+  setSlice(raw);                                          // rounds + syncs every surface
+});
+['pointerup','pointercancel'].forEach(t => rateBtn.addEventListener(t, () => {
+  if (!scrubbing) return;
+  scrubbing = false;
+  $('rateScrub').classList.remove('on');
+  rateBtn.classList.remove('scrubbing');
+  if (!scrubMoved){ setSlice(1); scrubTo(1); }            // tap resets
+}));
 
 /* Warp toggles from the bar; the sheet keeps its own control
    as the accessible twin, and both stay in sync through aaSetOn */
