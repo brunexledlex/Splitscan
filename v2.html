@@ -147,33 +147,41 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
    never shows an end. Scrubbing shifts background-position, not a
    transform. Major/minor tiles are 35px/7px — 5:1, so they stay in phase.
 
-   The read point is the Rate pill at the vertical centre, and the dial runs
-   past it in BOTH directions so up and down have equal travel. z-index sits
-   below the pill (which is 3) so the ticks pass behind it — the pill reads
-   as a lens on the dial rather than a label beside it. Pure readout: the
-   pill holds pointer capture for the whole gesture, so this never receives
-   an event itself. */
+   The read point is the Rate pill at the vertical centre, which is also the
+   dial's bottom edge: 1px (the floor) sits AT the pill, so the whole 1..60
+   range runs upward over exactly half the screen and 60px lands on the top
+   edge. Nothing exists below 1, so there is no dial below the pill either.
+   Tick spacing is therefore a function of viewport height and is set from
+   JS, not here. z-index sits below the pill (3) so the ticks pass behind
+   it — the pill reads as a lens on the dial rather than a label beside it.
+   Pure readout: the pill holds pointer capture for the whole gesture, so
+   this never receives an event itself. */
 #rateScrub{
   position:fixed;left:0;width:132px;z-index:2;
-  top:calc(var(--safe-t) + 73px);      /* wordmark bottom + 32 */
-  bottom:32px;
+  top:0;bottom:50%;                    /* exactly the upper half */
   pointer-events:none;opacity:0;transition:opacity .12s var(--ease);
   /* the dial sits over the live image — a scrim keeps mint ticks readable
      against a bright scene without boxing the dial in */
   background:linear-gradient(to right, rgba(0,0,0,.45), rgba(0,0,0,0) 76px);
-  -webkit-mask-image:linear-gradient(transparent,#000 15%,#000 85%,transparent);
-  mask-image:linear-gradient(transparent,#000 15%,#000 85%,transparent);
+  /* fades in from the top so the top of the range doesn't collide with the
+     wordmark; solid at the bottom, where the read point is */
+  -webkit-mask-image:linear-gradient(transparent,#000 22%,#000 100%);
+  mask-image:linear-gradient(transparent,#000 22%,#000 100%);
 }
 #rateScrub.on{opacity:1}
+/* background-size is set from JS: the tile has to equal one slice px, which
+   depends on viewport height. The values here are only a pre-measure default */
 #rateTicks{
   position:absolute;left:15px;top:0;bottom:0;width:21px;
   background-image:
     linear-gradient(to bottom, rgba(206,253,211,.4) 0 2px, transparent 2px),
     linear-gradient(to bottom, rgba(206,253,211,.16) 0 1px, transparent 1px);
-  background-size:21px 35px, 9px 7px;
+  background-size:21px 42px, 9px 8.5px;
   background-repeat:repeat-y;
   will-change:background-position;
 }
+#btnRate svg{width:15px;height:15px;fill:currentColor;display:block}
+#rateIco{display:grid;place-items:center}
 /* same on/off language as the mode pills: dim text at rest, the grey chip
    and bright mint text once it's actually doing something */
 #btnAA{right:15px;color:var(--mint-dim)}
@@ -508,7 +516,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <div id="rateTicks"></div>
 </div>
 <button class="pill" id="btnRate" aria-label="Slice thickness — drag to change, tap to reset"
-  >Rate <span id="rateVal">1</span> px</button>
+  ><span id="rateIco"></span><span id="rateVal">1</span> px</button>
 <button id="btnAA" class="pill" aria-pressed="false" aria-label="Warp"><span
   class="lg">Warp</span><span class="sm">Warp</span></button>
 
@@ -568,17 +576,6 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     </div>
   </div>
 
-
-  <div class="group">
-    <div class="label"><span id="lSlice">Slice</span><output id="oSlice">2 px</output></div>
-    <div class="seg" id="segSlice" role="group" aria-label="Slice thickness">
-      <button data-slice="1">1</button>
-      <button data-slice="2" aria-pressed="true">2</button>
-      <button data-slice="4">4</button>
-      <button data-slice="8">8</button>
-      <button data-slice="16">16</button>
-    </div>
-  </div>
 
   <div class="group">
     <div class="label"><span>Smoothing</span></div>
@@ -689,9 +686,11 @@ const ICON = {
   crop_free:'M120-120v-240h80v160h160v80H120Zm480 0v-80h160v-160h80v240H600ZM120-600v-240h240v80H200v160h-80Zm640 0v-160H600v-80h240v240h-80Z',
   close:'m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z',
   check:'M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z',
+  shutter_speed:'M360-840v-80h240v80H360ZM480-80q-75 0-140.5-28.5T225-186q-49-49-77-114.5T120-440q0-74 28.5-139.5T226-694q49-49 114.5-77.5T480-800q63 0 120 21t104 59l58-58 56 56-56 58q36 47 57 104t21 120q0 74-28 139.5T735-186q-49 49-114.5 77.5T480-80Zm0-360Zm0-80h268q-18-62-61.5-109T584-700L480-520Zm-70 40 134-232q-59-15-121.5-2.5T306-660l104 180Zm-206 80h206L276-632q-42 47-62.5 106.5T204-400Zm172 220 104-180H212q18 62 61.5 109T376-180Zm40 12q66 17 128 1.5T654-220L550-400 416-168Zm268-80q44-48 63.5-107.5T756-480H550l134 232Z',
 };
 const svg = n => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${ICON[n]}"/></svg>`;
 $('btnTune').innerHTML = svg('settings');   // settings
+$('rateIco').innerHTML = svg('shutter_speed');
 $('rollX').innerHTML = svg('close');    // dismiss the roll, no side effects
 
 /* ── canvases ─────────────────────────────────────────────────────── */
@@ -1770,16 +1769,10 @@ $('segMode').addEventListener('click', e => {
   S.mode = b.dataset.mode; applyMode();
   if (S.mode === 'strip' && AA.on) snack('Warp is unavailable in Strip.', 2200);
 });
-$('segSlice').addEventListener('click', e => {
-  const b = e.target.closest('button'); if (!b) return;
-  setSlice(+b.dataset.slice);
-});
 $('sSlice').addEventListener('input', e => setSlice(+e.target.value, true));
 function setSlice(v){
   S.slice = clamp(Math.round(v), 1, 60);
-  press($('segSlice'),'slice',S.slice);
   $('sSlice').value = S.slice;
-  $('oSlice').textContent = S.slice + ' px';
   $('oSliceFine').textContent = S.slice;
   $('rateVal').textContent = S.slice;          // the bar pill
 }
@@ -1819,8 +1812,6 @@ function applyMode(){
   if (typeof aaEligible === 'function'){
     $('gl').hidden = !aaEligible(); $('acc').hidden = !!aaEligible();
   }
-  $('lSlice').textContent =
-    S.mode==='burst' ? 'Ring' : S.mode==='field' ? 'Edge' : S.mode==='strip' ? 'Feed' : 'Slit';
   $('sSlice').max = 60;
   setSlice(clamp(S.slice, 1, +$('sSlice').max));
   // Strip has no centre to grab; the other three shapes still get one
@@ -1983,8 +1974,11 @@ async function useCamera(facing, quiet){
    The ruler carries values, not presets — every integer 1..60 is reachable,
    which is the whole 60-stop range the settings sheet exposes. */
 const SLICE_MIN = 1, SLICE_MAX = 60;
-const SLICE_PPU = 7;          // px of thumb travel per 1px of slice
 const SCRUB_SLOP = 5;         // px before a press counts as a drag, not a tap
+/* px of thumb travel per 1px of slice. Derived, not chosen: the range has to
+   span exactly half the screen so 1px sits at the pill and 60px lands on the
+   top edge, which makes it a function of viewport height. */
+let slicePPU = 8.5;
 
 /* raw (unrounded) drives the dial so it glides between integers. Shifting
    the tiled pattern up as the value rises means bigger values arrive from
@@ -1999,10 +1993,17 @@ const SCRUB_SLOP = 5;         // px before a press counts as a drag, not a tap
    once per gesture: a layout read on every pointermove would be wasteful. */
 let scrubRead = 0;
 function measureRead(){
+  // full range across half the screen — so a drag from the pill to the top
+  // edge is exactly 1px -> 60px, whatever the device height
+  slicePPU = (innerHeight/2) / (SLICE_MAX - SLICE_MIN);
+  // one minor tile IS one slice px, majors every 5, or the ticks would stop
+  // meaning anything once spacing became viewport-dependent
+  $('rateTicks').style.backgroundSize =
+    `21px ${slicePPU*5}px, 9px ${slicePPU}px`;
   scrubRead = innerHeight/2 - $('rateScrub').getBoundingClientRect().top;
 }
 function scrubTo(raw){
-  const y = scrubRead - (raw - SLICE_MIN) * SLICE_PPU;
+  const y = scrubRead - (raw - SLICE_MIN) * slicePPU;
   $('rateTicks').style.backgroundPosition = `0 ${y}px, 0 ${y}px`;
 }
 
@@ -2024,7 +2025,7 @@ rateBtn.addEventListener('pointermove', ev => {
   const dy = scrubY - ev.clientY;                         // up is positive
   if (Math.abs(dy) > SCRUB_SLOP) scrubMoved = true;
   // always measured from the press, never accumulated, so it can't drift
-  const raw = clamp(scrubFrom + dy/SLICE_PPU, SLICE_MIN, SLICE_MAX);
+  const raw = clamp(scrubFrom + dy/slicePPU, SLICE_MIN, SLICE_MAX);
   scrubTo(raw);
   setSlice(raw);                                          // rounds + syncs every surface
 });
