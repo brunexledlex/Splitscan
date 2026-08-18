@@ -173,15 +173,19 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
    this never receives an event itself. */
 #rateScrub{
   position:fixed;left:0;width:132px;z-index:2;
-  top:0;bottom:50%;                    /* exactly the upper half */
+  /* the rail hangs BELOW the pill, because that is where the unvisited range
+     lives: at 1px the whole 1..60 scale is laid out downward, 1 at the pill
+     and 60 at the far end, and dragging up pulls it through the read point.
+     The pill itself never moves. */
+  top:50%;
+  bottom:calc(var(--bar-h) + var(--safe-b) + 12px);
   pointer-events:none;opacity:0;transition:opacity .12s var(--ease);
   /* the dial sits over the live image — a scrim keeps mint ticks readable
      against a bright scene without boxing the dial in */
   background:linear-gradient(to right, rgba(0,0,0,.45), rgba(0,0,0,0) 76px);
-  /* fades in from the top so the top of the range doesn't collide with the
-     wordmark; solid at the bottom, where the read point is */
-  -webkit-mask-image:linear-gradient(transparent,#000 22%,#000 100%);
-  mask-image:linear-gradient(transparent,#000 22%,#000 100%);
+  /* solid at the pill, dissolving at the far end of the travel */
+  -webkit-mask-image:linear-gradient(#000 0,#000 72%,transparent 100%);
+  mask-image:linear-gradient(#000 0,#000 72%,transparent 100%);
 }
 #rateScrub.on{opacity:1}
 /* background-size is set from JS: the tile has to equal one slice px, which
@@ -2093,19 +2097,22 @@ let slicePPU = 8.5;
    the pill's own centre rather than to the box's midpoint — otherwise the
    tick standing for the current value drifts off the read point. Measured
    once per gesture: a layout read on every pointermove would be wasteful. */
-let scrubRead = 0;
+/* The read point is the rail's own top edge, which is the pill — so the whole
+   scale is laid out downward from it and no offset is needed. The rail is
+   measured rather than assumed: it runs from the pill to just above the mode
+   bar, and the full 1..60 has to fit that exactly, whatever the device. */
 function measureRead(){
-  // full range across half the screen — so a drag from the pill to the top
-  // edge is exactly 1px -> 60px, whatever the device height
-  slicePPU = (innerHeight/2) / (SLICE_MAX - SLICE_MIN);
+  const rail = $('rateScrub').getBoundingClientRect();
+  slicePPU = rail.height / (SLICE_MAX - SLICE_MIN);
   // one minor tile IS one slice px, majors every 5, or the ticks would stop
   // meaning anything once spacing became viewport-dependent
   $('rateTicks').style.backgroundSize =
     `21px ${slicePPU*5}px, 9px ${slicePPU}px`;
-  scrubRead = innerHeight/2 - $('rateScrub').getBoundingClientRect().top;
 }
 function scrubTo(raw){
-  const y = scrubRead - (raw - SLICE_MIN) * slicePPU;
+  // negative: the scale rides UP as the value climbs, so it travels with the
+  // thumb rather than against it
+  const y = -(raw - SLICE_MIN) * slicePPU;
   $('rateTicks').style.backgroundPosition = `0 ${y}px, 0 ${y}px`;
 }
 
