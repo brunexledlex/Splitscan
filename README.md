@@ -1,12 +1,11 @@
 # SPLIIIT
 
-**A slit-scan camera for the iPhone, with slit shapes beyond vertical and
+**A slit-scan browser camera for iPhone, with slitscanning beyond vertical and
 horizontal — a line, a burst, and a force field.**
 
 This is a prototype and a design project. It is not a product, there is no app
 store listing, and it will probably never have one. It exists because I love
-photography, and because slit-scan is the corner of photography where the
-camera stops describing space and starts describing time.
+photography, and because slit-scan images sit between photography and video and allow you to show space in constricted ways.
 
 **[Open the current build →](https://brunexledlex.github.io/Splitscan/v2.html)**
 
@@ -47,8 +46,7 @@ a slit, and a camera crawling along a track, one long exposure per frame.
 
 And your phone does it already, badly and by accident. A CMOS sensor reads out
 row by row rather than all at once, so the bottom of the frame is a few
-milliseconds younger than the top. That is why propellers bend and why a
-guitar string photographed on a phone looks like it is made of rubber. **Rolling
+milliseconds younger than the top. **Rolling
 shutter is an uncontrolled slit-scan.** This app is the same effect with the
 controls put back in.
 
