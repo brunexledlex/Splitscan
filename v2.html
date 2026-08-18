@@ -184,10 +184,11 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   /* the dial sits over the live image — a scrim keeps mint ticks readable
      against a bright scene without boxing the dial in */
   background:linear-gradient(to right, rgba(0,0,0,.45), rgba(0,0,0,0) 76px);
-  /* full strength everywhere above and through the pill; it only dissolves
-     at the very bottom, past the end of the range */
-  -webkit-mask-image:linear-gradient(#000 0,#000 88%,transparent 100%);
-  mask-image:linear-gradient(#000 0,#000 88%,transparent 100%);
+  /* full strength through the pill and the whole range, dissolving over the
+     same 12% at BOTH ends so the scale runs off the screen symmetrically
+     rather than being cut anywhere */
+  -webkit-mask-image:linear-gradient(transparent 0,#000 12%,#000 88%,transparent 100%);
+  mask-image:linear-gradient(transparent 0,#000 12%,#000 88%,transparent 100%);
 }
 #rateScrub.on{opacity:1}
 /* background-size is set from JS: the tile has to equal one slice px, which
