@@ -173,19 +173,21 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
    this never receives an event itself. */
 #rateScrub{
   position:fixed;left:0;width:132px;z-index:2;
-  /* the rail hangs BELOW the pill, because that is where the unvisited range
-     lives: at 1px the whole 1..60 scale is laid out downward, 1 at the pill
-     and 60 at the far end, and dragging up pulls it through the read point.
-     The pill itself never moves. */
-  top:50%;
+  /* The SCALE spans the whole screen and is never cut at the pill — the
+     ruler reads as one continuous object rather than something that begins
+     mid-air. What the pill-to-bar span defines is the RANGE: 1px sits at the
+     pill and 60px at the bar, so dragging up pulls the scale through the
+     read point. The pill itself never moves. */
+  top:0;
   bottom:calc(var(--bar-h) + var(--safe-b) + 12px);
   pointer-events:none;opacity:0;transition:opacity .12s var(--ease);
   /* the dial sits over the live image — a scrim keeps mint ticks readable
      against a bright scene without boxing the dial in */
   background:linear-gradient(to right, rgba(0,0,0,.45), rgba(0,0,0,0) 76px);
-  /* solid at the pill, dissolving at the far end of the travel */
-  -webkit-mask-image:linear-gradient(#000 0,#000 72%,transparent 100%);
-  mask-image:linear-gradient(#000 0,#000 72%,transparent 100%);
+  /* full strength everywhere above and through the pill; it only dissolves
+     at the very bottom, past the end of the range */
+  -webkit-mask-image:linear-gradient(#000 0,#000 88%,transparent 100%);
+  mask-image:linear-gradient(#000 0,#000 88%,transparent 100%);
 }
 #rateScrub.on{opacity:1}
 /* background-size is set from JS: the tile has to equal one slice px, which
@@ -193,14 +195,20 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 #rateTicks{
   position:absolute;left:15px;top:0;bottom:0;width:21px;
   background-image:
-    linear-gradient(to bottom, rgba(206,253,211,.4) 0 2px, transparent 2px),
-    linear-gradient(to bottom, rgba(206,253,211,.16) 0 1px, transparent 1px);
-  background-size:21px 42px, 9px 8.5px;
+    linear-gradient(to bottom, rgba(206,253,211,.4) 0 2px, transparent 2px);
+  background-size:21px 42px;
   background-repeat:repeat-y;
   will-change:background-position;
 }
 #btnRate svg{width:15px;height:15px;fill:currentColor;display:block}
 #rateIco{display:grid;place-items:center}
+/* fixed-width digits: without this the pill grows between "1 px" and "60 px"
+   mid-drag, and the ticks are sized to the pill, so the whole scale would
+   change width under the thumb */
+#rateVal{
+  display:inline-block;min-width:2ch;text-align:center;
+  font-variant-numeric:tabular-nums;
+}
 /* same on/off language as the mode pills: dim text at rest, the grey chip
    and bright mint text once it's actually doing something */
 #btnAA{right:15px;color:var(--mint-dim)}
@@ -2097,23 +2105,29 @@ let slicePPU = 8.5;
    the pill's own centre rather than to the box's midpoint — otherwise the
    tick standing for the current value drifts off the read point. Measured
    once per gesture: a layout read on every pointermove would be wasteful. */
-/* The read point is the rail's own top edge, which is the pill — so the whole
-   scale is laid out downward from it and no offset is needed. The rail is
-   measured rather than assumed: it runs from the pill to just above the mode
-   bar, and the full 1..60 has to fit that exactly, whatever the device. */
+/* The scale is drawn over the whole screen, but the RANGE is the span from
+   the pill down to the mode bar: 1px reads at the pill, 60px at the bar. Both
+   are measured rather than assumed, so the range fits any device — and the
+   read point has to be carried as an offset now that the scale starts at the
+   screen top instead of at the pill. One tick every 5 slice px. */
+let scrubRead = 0;
 function measureRead(){
   const rail = $('rateScrub').getBoundingClientRect();
-  slicePPU = rail.height / (SLICE_MAX - SLICE_MIN);
-  // one minor tile IS one slice px, majors every 5, or the ticks would stop
-  // meaning anything once spacing became viewport-dependent
-  $('rateTicks').style.backgroundSize =
-    `21px ${slicePPU*5}px, 9px ${slicePPU}px`;
+  const p = $('btnRate').getBoundingClientRect();
+  const pillMid = (p.top + p.bottom) / 2;
+  scrubRead = pillMid - rail.top;
+  slicePPU = (rail.bottom - pillMid) / (SLICE_MAX - SLICE_MIN);
+  // ticks run the pill's own width, so the scale and its handle read as one
+  // object. Measured, since the pill sizes to its label.
+  const w = Math.round(p.width);
+  const t = $('rateTicks');
+  t.style.width = w + 'px';
+  t.style.backgroundSize = `${w}px ${slicePPU*5}px`;
 }
 function scrubTo(raw){
-  // negative: the scale rides UP as the value climbs, so it travels with the
-  // thumb rather than against it
-  const y = -(raw - SLICE_MIN) * slicePPU;
-  $('rateTicks').style.backgroundPosition = `0 ${y}px, 0 ${y}px`;
+  // the scale rides UP as the value climbs, travelling with the thumb
+  const y = scrubRead - (raw - SLICE_MIN) * slicePPU;
+  $('rateTicks').style.backgroundPosition = `0 ${y}px`;
 }
 
 let scrubY = 0, scrubFrom = 1, scrubMoved = false, scrubbing = false;
