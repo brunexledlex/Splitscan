@@ -48,6 +48,9 @@
   --bar-h:83px;
 
   --ease:cubic-bezier(.2,0,0,1);
+  /* overshoots slightly past its target and settles back — the difference
+     between a control that moves and one that feels sprung */
+  --spring:cubic-bezier(.34,1.56,.64,1);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
@@ -387,7 +390,15 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   position:relative;width:100%;height:170px;flex:0 0 auto;
   border-radius:12px;overflow:hidden;background:#151515;
   touch-action:pan-y;                    /* long-press is JS's; scroll stays native */
+  transition:transform .34s var(--spring);
 }
+/* takes the press: quick and linear-feeling going down, sprung coming back */
+.thumb.pressing{
+  transform:scale(.955);
+  transition:transform .14s var(--ease);
+}
+/* the long-press landing */
+.thumb.popping{transform:scale(1.03)}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
 /* selection is a plain white ring — no wash, no badge. A box-shadow on
    .thumb ITSELF paints behind the full-bleed img (children always paint
@@ -457,7 +468,13 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   transition:opacity .1s linear;
 }
 .roll-preview.on{opacity:1}
-.roll-preview img{max-width:92vw;max-height:88dvh;object-fit:contain;border-radius:6px}
+/* rests slightly small so the long-press has something to grow out of */
+.roll-preview img{
+  max-width:92vw;max-height:88dvh;object-fit:contain;border-radius:6px;
+  transform:scale(.93);
+  transition:transform .3s var(--spring);
+}
+.roll-preview.on img{transform:scale(1)}
 
 /* ── export card (Figma Frame 8): mint, centred, three pills ──────── */
 .card{
@@ -1758,16 +1775,33 @@ function freeRollUrls(){ rollUrls.forEach(URL.revokeObjectURL); rollUrls = []; }
 
 const PRESS_MS = 380, MOVE_CANCEL = 12;
 
+/* Touch feedback, done with CSS transitions and two state classes rather than
+   a motion library: the app has no build step and no dependencies and is
+   offline-first, so a CDN spring would break offline and vendoring one costs
+   tens of KB for a handful of tweens. Transitions also inherit the existing
+   reduced-motion rule for free, where the Web Animations API would have had
+   to consult the query itself.
+
+   Three beats: the thumb takes the press, pops when the long-press lands, and
+   rebounds on release. The curves live in CSS (see --spring). */
+const POP_MS = 200;
+
 function wireThumbPress(b, url){
-  let timer = null, fired = false, moved = false, sx = 0, sy = 0;
+  let timer = null, pop = null, fired = false, moved = false, sx = 0, sy = 0;
+  const clear = () => { b.classList.remove('pressing','popping'); };
   const onMove = e => {
-    if (Math.hypot(e.clientX - sx, e.clientY - sy) > MOVE_CANCEL) moved = true;
+    if (!moved && Math.hypot(e.clientX - sx, e.clientY - sy) > MOVE_CANCEL){
+      moved = true;
+      clearTimeout(timer);
+      clear();                               // it's a scroll — let go of the press
+    }
   };
   const onUp = () => {
-    clearTimeout(timer);
+    clearTimeout(timer); clearTimeout(pop);
     b.removeEventListener('pointermove', onMove);
     b.removeEventListener('pointerup', onUp);
     b.removeEventListener('pointercancel', onUp);
+    clear();                                 // rebounds to rest on the spring
     if (fired) closePreview();
     else if (!moved)
       b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
@@ -1775,13 +1809,22 @@ function wireThumbPress(b, url){
   b.addEventListener('pointerdown', ev => {
     fired = false; moved = false; sx = ev.clientX; sy = ev.clientY;
     try{ b.setPointerCapture(ev.pointerId); } catch(e){}   // can legitimately fail; harmless
-    timer = setTimeout(() => { if (!moved){ fired = true; openPreview(url); } }, PRESS_MS);
+    b.classList.add('pressing');
+    timer = setTimeout(() => {
+      if (moved) return;
+      fired = true;
+      b.classList.remove('pressing');
+      b.classList.add('popping');            // pops as the preview arrives
+      pop = setTimeout(() => b.classList.remove('popping'), POP_MS);
+      openPreview(url);
+    }, PRESS_MS);
     b.addEventListener('pointermove', onMove);
     b.addEventListener('pointerup', onUp);
     b.addEventListener('pointercancel', onUp);
   });
 }
 
+/* the preview's own grow-in is pure CSS, off .roll-preview.on */
 function openPreview(url){
   $('rollPreviewImg').src = url;
   $('rollPreview').classList.add('on');
