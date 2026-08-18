@@ -56,18 +56,35 @@ controls put back in.
 
 Every slit here is the same idea: time is a scalar field over the frame, and the
 slit is the contour where that field equals *now*. Only the distance function
-changes, which is why three very different-looking effects share one engine.
+changes, which is why very different-looking effects share one engine.
+
+<table>
+<tr>
+<td width="33%" align="center"><img src="mode-swipe.svg" alt="Swipe" height="120"></td>
+<td width="33%" align="center"><img src="mode-burst.svg" alt="Burst" height="120"></td>
+<td width="33%" align="center"><img src="mode-strip.svg" alt="Strip" height="120"></td>
+</tr>
+<tr>
+<td align="center"><b>Swipe</b></td>
+<td align="center"><b>Burst</b></td>
+<td align="center"><b>Strip</b></td>
+</tr>
+</table>
 
 | Shape | The field | Reads as |
 |---|---|---|
 | **Swipe** | distance along a normal — a straight line, at any angle | Diagonal time. The classic slit-scan, freed from vertical/horizontal. |
 | **Burst** | distance from a centre — a ring | A sunburst. Anything moving smears along rays, because neighbouring radii are neighbouring moments. |
-| **Field** | distance from a band — two mirrored lines | A force field. A live, untouched strip down the middle; time peels away from it in both directions at once. |
+| **Strip** | a fixed slit at the frame's edge | A photo-finish camera. The picture grows sideways without bound, one column per frame. |
+
+A fourth shape, **Field** — a live band down the middle with time peeling away
+from it in both directions — is built and works, but is currently not offered
+in the mode bar. Its code is intact; one line of markup brings it back.
 
 <table>
 <tr>
 <td width="33%"><img src="examples/v2-burst.png" alt="Burst — a circular slit"><br><sub><b>Burst</b> · sunburst</sub></td>
-<td width="33%"><img src="examples/v2-field.png" alt="Field — a force-field slit"><br><sub><b>Field</b> · live band, time peeling outward</sub></td>
+<td width="33%"><img src="examples/v2-field.png" alt="Field — a force-field slit"><br><sub><b>Field</b> · retired from the bar, code intact</sub></td>
 <td width="33%"><img src="examples/v2-swipe-aa.png" alt="Swipe with anti-aliasing"><br><sub><b>Swipe</b> · angled, anti-aliased</sub></td>
 </tr>
 </table>
@@ -83,11 +100,13 @@ Every image above came out of the app itself, scanning the built-in demo source
 |---|---|---|
 | Swipe | up / down / left / right | the slit enters from behind the direction you dragged |
 | Burst | up / down | expands outward from the centre, or contracts inward |
-| Field | up / down · left / right | widens or narrows the live band · rotates it 90° |
+| Strip | — | the slit is fixed at the edge; there is nothing to aim |
 
-In **Field**, the band is also set directly: **drag either handle** on its edge —
-across to change width, around to rotate. A minimum width keeps the two handles
-from ever meeting at the centre, which is exactly where a swipe begins.
+**Slice thickness is a scrub dial.** Press the pill at the left edge and drag: a
+ruler runs up over half the screen, 1px at the pill to 60px at the top. Release
+commits, a tap resets to 1px. Thicker slices mean fewer, chunkier bands, each
+from a single instant — the traverse rate is unchanged, so a pass still takes
+the same time whatever the setting.
 
 **One press is one exposure.** Tap the shutter and the slit runs its full
 traverse — edge to edge for Swipe, centre to rim for Burst, band to edge for
@@ -198,6 +217,9 @@ sw.js                   offline shell, shared by both builds
 manifest.webmanifest    home-screen install
 icon-*.png              generated, not drawn
 logo.svg                the SPLIIIT wordmark, inlined into v2.html
+mode-*.svg              the three mode drawings — masked in-app, so they
+                        take the UI's colour rather than their own
+blank-roll.svg          the roll's empty state
 tools/make-icons.mjs    regenerates the icons — node tools/make-icons.mjs
 examples/               stills from the app, used in this README
 docs/                   working specs, written before each feature was built

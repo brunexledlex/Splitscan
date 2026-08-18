@@ -105,13 +105,28 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   background:var(--black);border-radius:80px;height:39px;width:100%;
 }
 #segMode button{
-  flex:1 1 0;min-width:0;
+  flex:1 1 0;min-width:0;gap:7px;
   font-size:12px;line-height:15px;color:var(--mint-dim);
   padding:0 4px;border-radius:50px;
   display:flex;align-items:center;justify-content:center;
   transition:background .15s var(--ease),color .15s var(--ease);
 }
 #segMode button[aria-pressed="true"]{background:var(--chip);color:var(--mint)}
+
+/* the mode drawings, as a legend in the sheet rather than in the bar
+   itself: they are line art roughly 8 units wide in an 847-unit viewBox, so
+   at the ~20px a 33px pill allows the strokes land under a third of a pixel
+   and turn to mush. They need room to be read. Masked rather than <img> so
+   they take the sheet's ink instead of their own flat black. */
+.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.modes figure{margin:0;text-align:center}
+.modes i{
+  display:block;width:100%;height:76px;
+  background:var(--black);
+  -webkit-mask:var(--ico) no-repeat center/contain;
+  mask:var(--ico) no-repeat center/contain;
+}
+.modes figcaption{font-size:11px;color:var(--on-surface-var);margin-top:6px}
 
 /* Rate and Warp: floating pills over the image, right above the
    bar — the same look they had inside it, just no longer sharing its row. */
@@ -338,9 +353,20 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   overflow-y:auto;overscroll-behavior:contain;
   -webkit-overflow-scrolling:touch;
 }
+/* blank state: the drawing rides above the line. ::before and ::after are
+   both flex children of the already-centred grid, so they stack and centre
+   with no wrapper. Masked, so the art paints in lime rather than its own
+   flat black — which would be invisible on this ground. */
+#rollGrid:empty::before{
+  content:'';align-self:center;flex:0 0 auto;
+  width:min(66%,190px);aspect-ratio:1260.59/1036.96;
+  background:var(--mint);
+  -webkit-mask:url('./blank-roll.svg') no-repeat center/contain;
+  mask:url('./blank-roll.svg') no-repeat center/contain;
+}
 #rollGrid:empty::after{
-  content:'No captures yet';text-align:center;
-  font-size:12px;color:rgba(255,255,255,.45);padding:18px 0;
+  content:'Go do some spliiits';text-align:center;
+  font-size:13px;color:rgba(255,255,255,.55);padding:16px 0 0;
 }
 /* fixed frame height, full width — a real roll shows every exposure at the
    same size, whatever the source capture's own aspect ratio */
@@ -376,9 +402,10 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .thumb[aria-pressed="true"] .tick{opacity:1;transform:scale(1)}
 .cpill:disabled{opacity:.4}
 /* the primary action reads as one: taller, bolder, larger type */
+/* radius tracks half the height, so it stays a true pill as it grows */
 .cpill.primary{
   background:var(--mint);color:var(--black);
-  height:52px;font-size:16px;font-weight:700;border-radius:26px;
+  height:64px;font-size:18px;font-weight:700;border-radius:32px;
 }
 /* sized to its label and centred on the SCREEN, not on the tilted card —
    which is why it lives outside that card in the markup. z-index 6 clears
@@ -386,7 +413,7 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 #rollSave{
   position:fixed;left:50%;bottom:calc(var(--safe-b) + 40px);z-index:6;
   transform:translateX(-50%) translateY(6px);
-  width:auto;padding:0 44px;
+  width:auto;padding:0 56px;
   opacity:0;pointer-events:none;
   transition:opacity .16s var(--ease),transform .16s var(--ease);
 }
@@ -561,6 +588,15 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <p class="hint">Drag anywhere on the image to aim the slit by hand.</p>
 
   <div class="group">
+    <div class="label"><span>Modes</span></div>
+    <div class="modes">
+      <figure><i style="--ico:url('./mode-swipe.svg')"></i><figcaption>Swipe</figcaption></figure>
+      <figure><i style="--ico:url('./mode-burst.svg')"></i><figcaption>Burst</figcaption></figure>
+      <figure><i style="--ico:url('./mode-strip.svg')"></i><figcaption>Strip</figcaption></figure>
+    </div>
+  </div>
+
+  <div class="group">
     <div class="label"><span>Source</span></div>
     <div class="seg" id="segSource" role="group" aria-label="Source">
       <button data-source="environment">Rear</button>
@@ -670,9 +706,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
 </div>
 
-<div id="sheetRoll" class="card roll" role="dialog" aria-modal="true" aria-label="SPLIIIT Roll">
+<div id="sheetRoll" class="card roll" role="dialog" aria-modal="true" aria-label="Spliiits">
   <div class="roll-head">
-    <b class="card-title" id="rollTitle" style="align-self:auto">SPLIIIT Roll <span id="rollCount"></span></b>
+    <b class="card-title" id="rollTitle" style="align-self:auto">Spliiits <span id="rollCount"></span></b>
     <div class="roll-head-actions">
       <button id="rollClearAll" class="roll-text-btn">Clear all</button>
       <button id="rollX" class="roll-x" aria-label="Close"></button>
@@ -2144,7 +2180,7 @@ async function useFile(f){
 // see sw.js for why a bare './sw.js' can look unchanged for 10 minutes on
 // GitHub Pages even right after a real deploy.
 if ('serviceWorker' in navigator && window.isSecureContext){
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=6').catch(() => {}));
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=7').catch(() => {}));
 }
 addEventListener('resize', () => {
   resize(); syncCapture();
