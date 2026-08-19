@@ -79,7 +79,10 @@ body.roll-open #hud{opacity:0}
 #topbar{
   position:fixed;left:0;right:0;top:0;z-index:3;
   padding:calc(var(--safe-t) + 25px) 26px 0;
-  display:flex;align-items:flex-start;justify-content:space-between;
+  /* center, not flex-start: the wordmark is 16px tall and the icon buttons
+     are 40px, so sharing a top edge put their centrelines 12px apart and the
+     logo read as sitting high. Now all three share one horizontal axis. */
+  display:flex;align-items:center;justify-content:space-between;
   pointer-events:none;
 }
 #topbar > *{pointer-events:auto}
