@@ -19,7 +19,8 @@
   --black:#000000;
   --mint:#CEFDD3;
   --mint-dim:#5B715E;         /* unselected label, mint family */
-  --chip:#4C4C4C;             /* selected chip inside the mode pill */
+  --chip:#4C4C4C;             /* toast ground; NOT the selected state */
+  --sel:#7F92FF;              /* selected: mode chip, scrubbing pill */
   --danger:#BB0404;
 
   /* mapped onto the old names so every component recolours at once */
@@ -121,7 +122,7 @@ body.roll-open #hud{opacity:0}
   display:flex;align-items:center;justify-content:center;
   transition:background .15s var(--ease),color .15s var(--ease);
 }
-#segMode button[aria-pressed="true"]{background:var(--chip);color:var(--mint)}
+#segMode button[aria-pressed="true"]{background:var(--sel);color:var(--black)}
 
 /* the mode drawings, as a legend in the sheet rather than in the bar
    itself: they are line art roughly 8 units wide in an 847-unit viewBox, so
@@ -158,8 +159,8 @@ body.roll-open #hud{opacity:0}
 }
 /* it IS the read point, so it lifts off the dial rather than sitting in it */
 #btnRate.scrubbing{
-  background:var(--chip);
-  box-shadow:0 0 0 1px rgba(206,253,211,.45), 0 2px 14px rgba(0,0,0,.55);
+  background:var(--sel);color:var(--black);
+  box-shadow:0 0 0 1px rgba(127,146,255,.5), 0 2px 14px rgba(0,0,0,.55);
 }
 
 /* Slice scrubber: a dial that runs down into the Rate pill. Drag up for
@@ -188,8 +189,12 @@ body.roll-open #hud{opacity:0}
      mid-air. What the pill-to-bar span defines is the RANGE: 1px sits at the
      pill and 60px at the bar, so dragging up pulls the scale through the
      read point. The pill itself never moves. */
-  top:0;
-  bottom:calc(var(--bar-h) + var(--safe-b) + 12px);
+  /* Equal insets, which is what makes the two ends equidistant from the
+     centre pill. The inset clears the roll: at 48px on a 35.5px offset the
+     roll tops out at bar-h + safe-b + 83.5, so 96 leaves ~12px of air. Works
+     out around 56% of a 812pt screen, derived rather than picked. */
+  top:calc(var(--bar-h) + var(--safe-b) + 96px);
+  bottom:calc(var(--bar-h) + var(--safe-b) + 96px);
   pointer-events:none;opacity:0;transition:opacity .12s var(--ease);
   /* the dial sits over the live image — a scrim keeps mint ticks readable
      against a bright scene without boxing the dial in */
@@ -223,7 +228,7 @@ body.roll-open #hud{opacity:0}
 /* same on/off language as the mode pills: dim text at rest, the grey chip
    and bright mint text once it's actually doing something */
 #btnAA{right:15px;color:var(--mint-dim)}
-#btnAA[aria-pressed="true"]{background:var(--chip);color:var(--mint)}
+#btnAA[aria-pressed="true"]{background:var(--sel);color:var(--black)}
 #btnAA .sm{display:none}
 /* the Figma bar was drawn at 440; below ~420 "Warp" cannot sit
    at full width as a floating pill without crowding the shutter */
@@ -332,9 +337,9 @@ body.roll-open #hud{opacity:0}
    rather than guessed, so they stay aligned if either size changes. */
 #btnRoll{
   position:fixed;left:15px;z-index:3;
-  bottom:calc(var(--bar-h) + var(--safe-b) + 28px + (63px - 40px)/2);
-  width:40px;height:40px;
-  border-radius:9px;border:2px solid var(--mint);background:var(--black);
+  bottom:calc(var(--bar-h) + var(--safe-b) + 28px + (63px - 48px)/2);
+  width:48px;height:48px;
+  border-radius:11px;border:2px solid var(--mint);background:var(--black);
   display:grid;place-items:center;
   box-shadow:0 2px 10px rgba(0,0,0,.35);
 }
@@ -346,7 +351,7 @@ body.roll-open #hud{opacity:0}
    outright; border-radius then clips the image's painted content to it. */
 #btnRoll img{
   position:absolute;inset:0;width:100%;height:100%;
-  object-fit:cover;display:block;border-radius:7px;
+  object-fit:cover;display:block;border-radius:9px;
 }
 #rollBadge{
   position:absolute;top:-7px;right:-7px;min-width:19px;height:19px;padding:0 5px;
@@ -722,7 +727,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <div id="advanced" hidden>
     <div class="group">
       <div class="label"><span>Slice — full range</span><output id="oSliceFine">2</output></div>
-      <input type="range" id="sSlice" min="1" max="60" step="1" value="2" aria-label="Slice thickness fine">
+      <input type="range" id="sSlice" min="1" max="30" step="1" value="2" aria-label="Slice thickness fine">
     </div>
     <div class="group">
       <div class="label"><span>Guides</span></div>
@@ -2082,7 +2087,7 @@ $('segMode').addEventListener('click', e => {
 });
 $('sSlice').addEventListener('input', e => setSlice(+e.target.value, true));
 function setSlice(v){
-  S.slice = clamp(Math.round(v), 1, 60);
+  S.slice = clamp(Math.round(v), 1, SLICE_MAX);
   $('sSlice').value = S.slice;
   $('oSliceFine').textContent = S.slice;
   $('rateVal').textContent = S.slice;          // the bar pill
@@ -2124,7 +2129,7 @@ function applyMode(){
   if (typeof aaEligible === 'function'){
     $('gl').hidden = !aaEligible(); $('acc').hidden = !!aaEligible();
   }
-  $('sSlice').max = 60;
+  $('sSlice').max = SLICE_MAX;
   setSlice(clamp(S.slice, 1, +$('sSlice').max));
   // Strip has no centre to grab; the other three shapes still get one
   $('grpPivot').hidden = S.mode === 'strip';
@@ -2285,7 +2290,7 @@ async function useCamera(facing, quiet){
    wherever you left it. A tap with no drag resets to 1px.
    The ruler carries values, not presets — every integer 1..60 is reachable,
    which is the whole 60-stop range the settings sheet exposes. */
-const SLICE_MIN = 1, SLICE_MAX = 60;
+const SLICE_MIN = 1, SLICE_MAX = 30;
 const SCRUB_SLOP = 5;         // px before a press counts as a drag, not a tap
 /* px of thumb travel per 1px of slice. Derived, not chosen: the range has to
    span exactly half the screen so 1px sits at the pill and 60px lands on the
