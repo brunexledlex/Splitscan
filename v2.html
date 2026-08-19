@@ -1810,6 +1810,46 @@ const rollPut = rec  => txReq('readwrite', st => st.put(rec));
 const rollAll = ()   => txReq('readonly',  st => st.getAll()).then(r => r || []);
 const rollDel = name => txReq('readwrite', st => st.delete(name)).catch(() => {});
 
+/* ── milestones ───────────────────────────────────────────────────────
+   Counts are lifetime, so unlike every setting in this app they have to
+   survive a launch. localStorage throws outright in some private modes, so
+   both ends are guarded and a failure just means no milestones rather than
+   no capture.
+
+   Fired on a delay: snack() drives one shared element, so calling it again
+   immediately would cancel the "Saved Split 01" toast that just appeared. */
+const STATS_KEY = 'spliiit-stats';
+const SHOT_MILESTONES = new Map([
+  [1,    'First spliiit. Time is an axis now.'],
+  [10,   'Ten spliiits.'],
+  [25,   '25 — Lartigue only needed one.'],
+  [50,   'Fifty. That’s a roll of film.'],
+  [100,  '100 spliiits. Photo-finish territory.'],
+  [250,  '250. Muybridge managed with 24.'],
+  [500,  'Five hundred. This is a practice now.'],
+  [1000, 'A thousand. The stargate took fewer.'],
+]);
+const loadStats = () => { try{ return JSON.parse(localStorage.getItem(STATS_KEY)) || {}; }
+                          catch(e){ return {}; } };
+const saveStats = st => { try{ localStorage.setItem(STATS_KEY, JSON.stringify(st)); }
+                          catch(e){} };
+function milestone(msg){ setTimeout(() => snack(msg, 3400), 2600); }
+
+function recordShot(mode){
+  const st = loadStats();
+  st.shots = (st.shots || 0) + 1;
+  st.modes = st.modes || {};
+  st.modes[mode] = true;
+  const hit = SHOT_MILESTONES.get(st.shots);
+  // one at a time: a count milestone outranks the shapes one on a tie
+  if (hit) milestone(hit);
+  else if (!st.allModes && ['swipe','burst','strip'].every(m => st.modes[m])){
+    st.allModes = true;
+    milestone('Swipe, Burst, Strip — you’ve used all three.');
+  }
+  saveStats(st);
+}
+
 async function archiveSnapshot(shot){
   if (!shot || !S.autoSave) return;
   // read the label BEFORE awaiting — switching shape during the encode
@@ -1822,19 +1862,24 @@ async function archiveSnapshot(shot){
   const name = `Split ${String(n).padStart(2,'0')}.png`;
   try{
     await rollPut({ name, blob, at, size: blob.size, mode });
+    recordShot(mode);
     await pruneRoll();
     await refreshRoll();
     snack('Saved ' + name.replace(/\.png$/,''), 2400);
   } catch(e){ snack('Could not archive: ' + (e.message||e), 4000); }
 }
 
+let warnedFull = false;
 async function pruneRoll(){                    // oldest out first
   const all = (await rollAll()).sort((a,b) => a.at - b.at);
   let bytes = all.reduce((n,r) => n + r.size, 0);
+  let evicted = 0;
   while (all.length > ROLL_MAX || bytes > ROLL_BYTES){
     const old = all.shift(); if (!old) break;
-    bytes -= old.size; await rollDel(old.name);
+    bytes -= old.size; await rollDel(old.name); evicted++;
   }
+  // worth saying once — silently losing captures is worse than a toast
+  if (evicted && !warnedFull){ warnedFull = true; milestone('Roll is full — oldest spliiits start dropping.'); }
 }
 async function refreshRoll(){
   const all = await rollAll();
