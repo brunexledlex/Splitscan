@@ -434,9 +434,12 @@ body.roll-open #hud{opacity:0}
 .cpill:disabled{opacity:.4}
 /* the primary action reads as one: taller, bolder, larger type */
 /* radius tracks half the height, so it stays a true pill as it grows */
+/* a circle, sized off the shutter so the two read as siblings — one takes the
+   picture, one keeps it */
 .cpill.primary{
   background:var(--mint);color:var(--black);
-  height:64px;font-size:18px;font-weight:700;border-radius:32px;
+  width:76px;height:76px;border-radius:50%;
+  font-size:17px;font-weight:700;
 }
 /* sized to its label and centred on the SCREEN, not on the tilted card —
    which is why it lives outside that card in the markup. z-index 6 clears
@@ -444,10 +447,28 @@ body.roll-open #hud{opacity:0}
 #rollSave{
   position:fixed;left:50%;bottom:calc(var(--safe-b) + 40px);z-index:6;
   transform:translateX(-50%) translateY(6px);
-  width:auto;padding:0 56px;
+  padding:0;
+  overflow:hidden;                 /* clips the slit sweep to the circle */
   opacity:0;pointer-events:none;
-  transition:opacity .16s var(--ease),transform .16s var(--ease);
+  transition:opacity .16s var(--ease),transform .22s var(--spring);
 }
+/* the pizazz: a slit sweeps across the button, the same gesture the app
+   performs on an image. Fires once when the roll opens, so the eye is led to
+   Save without anything looping forever in the corner of your vision.
+   translate rather than left/width, so it stays on the compositor. */
+#rollSave::after{
+  content:'';position:absolute;top:-20%;bottom:-20%;left:0;width:46%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.9),transparent);
+  transform:translateX(-260%) skewX(-14deg);
+  pointer-events:none;
+}
+#rollSave.on::after{animation:slit-sweep .85s var(--ease) .28s 1}
+@keyframes slit-sweep{
+  from{transform:translateX(-260%) skewX(-14deg)}
+  to  {transform:translateX(360%)  skewX(-14deg)}
+}
+/* and it gives under the thumb, on the same spring as the roll's thumbs */
+#rollSave.on:active{transform:translateX(-50%) scale(.93)}
 #rollSave.on{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
 
 /* header row: title + Clear all + the dismiss-only close */
