@@ -19,7 +19,8 @@
   --black:#000000;
   --mint:#CEFDD3;
   --mint-dim:#5B715E;         /* unselected label, mint family */
-  --chip:#4C4C4C;             /* selected chip inside the mode pill */
+  --chip:#4C4C4C;             /* toast ground; NOT the selected state */
+  --sel:#7F92FF;              /* selected: mode chip, scrubbing pill */
   --danger:#BB0404;
 
   /* mapped onto the old names so every component recolours at once */
@@ -79,7 +80,10 @@ body.roll-open #hud{opacity:0}
 #topbar{
   position:fixed;left:0;right:0;top:0;z-index:3;
   padding:calc(var(--safe-t) + 25px) 26px 0;
-  display:flex;align-items:flex-start;justify-content:space-between;
+  /* center, not flex-start: the wordmark is 16px tall and the icon buttons
+     are 40px, so sharing a top edge put their centrelines 12px apart and the
+     logo read as sitting high. Now all three share one horizontal axis. */
+  display:flex;align-items:center;justify-content:space-between;
   pointer-events:none;
 }
 #topbar > *{pointer-events:auto}
@@ -118,7 +122,7 @@ body.roll-open #hud{opacity:0}
   display:flex;align-items:center;justify-content:center;
   transition:background .15s var(--ease),color .15s var(--ease);
 }
-#segMode button[aria-pressed="true"]{background:var(--chip);color:var(--mint)}
+#segMode button[aria-pressed="true"]{background:var(--sel);color:var(--black)}
 
 /* the mode drawings, as a legend in the sheet rather than in the bar
    itself: they are line art roughly 8 units wide in an 847-unit viewBox, so
@@ -155,8 +159,8 @@ body.roll-open #hud{opacity:0}
 }
 /* it IS the read point, so it lifts off the dial rather than sitting in it */
 #btnRate.scrubbing{
-  background:var(--chip);
-  box-shadow:0 0 0 1px rgba(206,253,211,.45), 0 2px 14px rgba(0,0,0,.55);
+  background:var(--sel);color:var(--black);
+  box-shadow:0 0 0 1px rgba(127,146,255,.5), 0 2px 14px rgba(0,0,0,.55);
 }
 
 /* Slice scrubber: a dial that runs down into the Rate pill. Drag up for
@@ -185,8 +189,12 @@ body.roll-open #hud{opacity:0}
      mid-air. What the pill-to-bar span defines is the RANGE: 1px sits at the
      pill and 60px at the bar, so dragging up pulls the scale through the
      read point. The pill itself never moves. */
-  top:0;
-  bottom:calc(var(--bar-h) + var(--safe-b) + 12px);
+  /* Equal insets, which is what makes the two ends equidistant from the
+     centre pill. The inset clears the roll: at 48px on a 35.5px offset the
+     roll tops out at bar-h + safe-b + 83.5, so 96 leaves ~12px of air. Works
+     out around 56% of a 812pt screen, derived rather than picked. */
+  top:calc(var(--bar-h) + var(--safe-b) + 96px);
+  bottom:calc(var(--bar-h) + var(--safe-b) + 96px);
   pointer-events:none;opacity:0;transition:opacity .12s var(--ease);
   /* the dial sits over the live image — a scrim keeps mint ticks readable
      against a bright scene without boxing the dial in */
@@ -220,7 +228,7 @@ body.roll-open #hud{opacity:0}
 /* same on/off language as the mode pills: dim text at rest, the grey chip
    and bright mint text once it's actually doing something */
 #btnAA{right:15px;color:var(--mint-dim)}
-#btnAA[aria-pressed="true"]{background:var(--chip);color:var(--mint)}
+#btnAA[aria-pressed="true"]{background:var(--sel);color:var(--black)}
 #btnAA .sm{display:none}
 /* the Figma bar was drawn at 440; below ~420 "Warp" cannot sit
    at full width as a floating pill without crowding the shutter */
@@ -324,10 +332,16 @@ body.roll-open #hud{opacity:0}
 .chip svg{width:18px;height:18px;fill:currentColor}
 
 /* roll: a thumbnail of the last capture, sat next to settings */
+/* over the image now, left of the shutter and centred on its axis, so the
+   two read as one row. The offset is derived from the shutter's own anchor
+   rather than guessed, so they stay aligned if either size changes. */
 #btnRoll{
-  position:relative;width:40px;height:40px;flex:0 0 40px;
-  border-radius:9px;border:2px solid var(--mint);background:var(--black);
+  position:fixed;left:15px;z-index:3;
+  bottom:calc(var(--bar-h) + var(--safe-b) + 28px + (63px - 48px)/2);
+  width:48px;height:48px;
+  border-radius:11px;border:2px solid var(--mint);background:var(--black);
   display:grid;place-items:center;
+  box-shadow:0 2px 10px rgba(0,0,0,.35);
 }
 /* absolutely positioned, not a stretched grid item: place-items:center on
    the button sizes grid children to their own content, so width/height:100%
@@ -337,7 +351,7 @@ body.roll-open #hud{opacity:0}
    outright; border-radius then clips the image's painted content to it. */
 #btnRoll img{
   position:absolute;inset:0;width:100%;height:100%;
-  object-fit:cover;display:block;border-radius:7px;
+  object-fit:cover;display:block;border-radius:9px;
 }
 #rollBadge{
   position:absolute;top:-7px;right:-7px;min-width:19px;height:19px;padding:0 5px;
@@ -431,9 +445,11 @@ body.roll-open #hud{opacity:0}
 .cpill:disabled{opacity:.4}
 /* the primary action reads as one: taller, bolder, larger type */
 /* radius tracks half the height, so it stays a true pill as it grows */
+/* a circle, and the biggest thing on the sheet — 76px + 80% */
 .cpill.primary{
   background:var(--mint);color:var(--black);
-  height:64px;font-size:18px;font-weight:700;border-radius:32px;
+  width:137px;height:137px;border-radius:50%;
+  font-size:24px;font-weight:700;
 }
 /* sized to its label and centred on the SCREEN, not on the tilted card —
    which is why it lives outside that card in the markup. z-index 6 clears
@@ -441,10 +457,28 @@ body.roll-open #hud{opacity:0}
 #rollSave{
   position:fixed;left:50%;bottom:calc(var(--safe-b) + 40px);z-index:6;
   transform:translateX(-50%) translateY(6px);
-  width:auto;padding:0 56px;
+  padding:0;
+  overflow:hidden;                 /* clips the slit sweep to the circle */
   opacity:0;pointer-events:none;
-  transition:opacity .16s var(--ease),transform .16s var(--ease);
+  transition:opacity .16s var(--ease),transform .22s var(--spring);
 }
+/* the pizazz: a slit sweeps across the button, the same gesture the app
+   performs on an image. Fires once when the roll opens, so the eye is led to
+   Save without anything looping forever in the corner of your vision.
+   translate rather than left/width, so it stays on the compositor. */
+#rollSave::after{
+  content:'';position:absolute;top:-20%;bottom:-20%;left:0;width:46%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.9),transparent);
+  transform:translateX(-260%) skewX(-14deg);
+  pointer-events:none;
+}
+#rollSave.on::after{animation:slit-sweep .85s var(--ease) .28s 1}
+@keyframes slit-sweep{
+  from{transform:translateX(-260%) skewX(-14deg)}
+  to  {transform:translateX(360%)  skewX(-14deg)}
+}
+/* and it gives under the thumb, on the same spring as the roll's thumbs */
+#rollSave.on:active{transform:translateX(-50%) scale(.93)}
 #rollSave.on{opacity:1;pointer-events:auto;transform:translateX(-50%) translateY(0)}
 
 /* header row: title + Clear all + the dismiss-only close */
@@ -585,15 +619,16 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     </svg>
   </div>
   <div class="top-actions">
-    <button id="btnRoll" hidden aria-label="Open roll">
-      <img id="rollThumb" alt="">
-      <span id="rollBadge">0</span>
-    </button>
+    <button class="icon-btn" id="btnFlip" aria-label="Switch camera"></button>
     <button class="icon-btn" id="btnTune" aria-label="Settings"></button>
   </div>
 </div>
 
 <button id="shutter" aria-label="Capture"></button>
+<button id="btnRoll" hidden aria-label="Open roll">
+  <img id="rollThumb" alt="">
+  <span id="rollBadge">0</span>
+</button>
 
 <!-- floating over the live preview, right above the bar, so the mode
      selector below can have the bar to itself -->
@@ -602,7 +637,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 </div>
 <button class="pill" id="btnRate" aria-label="Slice thickness — drag to change, tap to reset"
   ><span id="rateIco"></span><span id="rateVal">1</span> px</button>
-<button id="btnAA" class="pill" aria-pressed="false" aria-label="Warp"><span
+<!-- hidden, not removed: aaSetOn still syncs its aria-pressed and the click
+     handler still binds to it, so the element has to stay in the DOM. Warp
+     remains reachable from Settings. Drop the attribute to bring it back. -->
+<button id="btnAA" class="pill" hidden aria-pressed="false" aria-label="Warp"><span
   class="lg">Warp</span><span class="sm">Warp</span></button>
 
 <div id="bar">
@@ -689,7 +727,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <div id="advanced" hidden>
     <div class="group">
       <div class="label"><span>Slice — full range</span><output id="oSliceFine">2</output></div>
-      <input type="range" id="sSlice" min="1" max="60" step="1" value="2" aria-label="Slice thickness fine">
+      <input type="range" id="sSlice" min="1" max="30" step="1" value="2" aria-label="Slice thickness fine">
     </div>
     <div class="group">
       <div class="label"><span>Guides</span></div>
@@ -790,6 +828,7 @@ const ICON = {
 };
 const svg = n => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${ICON[n]}"/></svg>`;
 $('btnTune').innerHTML = svg('settings');   // settings
+$('btnFlip').innerHTML = svg('cameraswitch');
 $('rateIco').innerHTML = svg('shutter_speed');
 // icons trail their labels, so they're appended rather than prepended
 $('lnkSite').insertAdjacentHTML('beforeend', svg('open_in_new'));
@@ -807,7 +846,20 @@ const S = {
   mode:'burst', angle:0, slice:1, dir:'right', bandW:0.10, capture:'screen', autoSave:true,
   cx:.5, cy:.5, reverse:false, guides:true, manual:false, smooth:true,
 };
-const FEATHER = 3;   // px (device-res canvas units) softened at each slice edge
+/* Overlap softened at each slice edge. Proportional, not a flat 3px: a fixed
+   feather is half a thin slice but a fifteenth of a 40px one, so the join
+   stopped reading as a blend exactly where the slices got chunky enough to
+   need it.
+
+   A feather anywhere near the width of its own band leaves the alpha ramp
+   short of full strength inside it and the band lands translucent — Burst
+   measured 73.8% opacity at slice 1 with a 2px floor, and 80.7% at slice 2
+   with the feather at half the band. So it is a third of the slice, and does
+   not engage until that third clears 3px — a 1.33px radial ramp still left
+   Burst at 90.6% at slice 4, too fine to resolve against the next ring.
+   Below that, slices are about a frame apart anyway and have nothing to
+   blend. Sub-pixel feathers take the crisp path. */
+const featherPx = () => S.slice >= 9 ? Math.min(S.slice / 3, 16) : 0;
 const RATE = { swipe:200, burst:240, field:200 };   // px/s, fixed per shape
 const src = { el:null, w:0, h:0, kind:null, mirror:false, stream:null, facing:'environment' };
 
@@ -922,11 +974,11 @@ function ensureFeather(){
    Smoothing can't just soften this slice's own edge: consecutive slices sit
    side by side, so fading the boundary would expose the empty canvas rather
    than the previous exposure. Instead the slice is EXTENDED backwards by
-   FEATHER px so it genuinely overlaps its predecessor, painted to a scratch
+   featherPx() so it genuinely overlaps its predecessor, painted to a scratch
    canvas, alpha-ramped 0→1 across that overlap (destination-in multiplies
    the drawn pixels' alpha), and blended over the accumulation buffer — a
    real cross-fade between the two moments. */
-function paintBand(s0, s1){
+function paintBand(s0, s1, alpha = 1){
   const th = S.angle*DEG, nx = -Math.sin(th), ny = Math.cos(th);
   const dxv = Math.cos(th), dyv = Math.sin(th), D = Math.hypot(W,H);
   const cx = W/2, cy = H/2;
@@ -938,15 +990,16 @@ function paintBand(s0, s1){
     c.lineTo(cx+nx*b-dxv*D, cy+ny*b-dyv*D);
     c.closePath();
   };
-  if (!S.smooth){
-    ax.save(); band(ax, s0, s1); ax.clip();
+  const F = featherPx();
+  if (!S.smooth || F < 1){
+    ax.save(); ax.globalAlpha = alpha; band(ax, s0, s1); ax.clip();
     drawSource(ax); ax.restore();
     return;
   }
   // trailing edge depends on which way the slit is travelling
   const back  = dir() > 0 ? s0 : s1;
   const front = dir() > 0 ? s1 : s0;
-  const ext   = back - (dir() > 0 ? FEATHER : -FEATHER);
+  const ext   = back - (dir() > 0 ? F : -F);
 
   ensureFeather();
   fx.clearRect(0,0,W,H);
@@ -961,7 +1014,7 @@ function paintBand(s0, s1){
   fx.fillStyle = g; fx.fillRect(0,0,W,H);
   fx.restore();
 
-  ax.drawImage(fthCv, 0, 0);
+  ax.save(); ax.globalAlpha = alpha; ax.drawImage(fthCv, 0, 0); ax.restore();
 }
 
 function passProgress(){
@@ -1004,19 +1057,47 @@ function stepSwipe(dt){
    progress ring unchanged, but the picture only takes a sample once a whole
    slice of ground has gone by — and that sample is one slice wide, from one
    instant. Slice now sets band thickness, which is what it is called. */
+/* Frames spanned by the slice currently being built. A thick slice takes many
+   frames to travel its own width — 12 of them at 40px — and sampling only the
+   instant it completes threw the other 11 away. That is what reads as missing
+   content at high slice values: not missing pixels, missing MOMENTS. Measured
+   before this: a 603-frame pass at slice 40 produced 51 distinct bands.
+
+   So every frame now folds into the slice being built, at alpha 1/k. That is a
+   running arithmetic mean: frame 1 paints opaque, frame 2 at 1/2, frame 3 at
+   1/3, and the band is the average of all of them while staying fully opaque
+   throughout. Painting each at a fixed 1/n instead would leave the band at
+   only 1-(1-1/n)^n — about 65% — and the picture would come out dim.
+
+   Note this cannot be fixed by forcing 60fps: the discard is set by slice
+   thickness, not frame rate. More frames per second means more frames thrown
+   away, not fewer. Verified gapless and identical at both 30 and 60fps. */
+let sliceK = 0;
+
 function emitSlices(pos, painted, setPainted, paint){
   const w = Math.max(S.slice,1), d = dir();
+  const integrate = S.smooth && w > 1;
   let guard = 512;                       // a resize mid-pass could strand these
   while ((pos() - painted())*d >= w && guard--){
     const a = painted(), b = a + d*w;
-    paint(Math.min(a,b), Math.max(a,b));
+    sliceK++;
+    paint(Math.min(a,b), Math.max(a,b), integrate ? 1/sliceK : 1);
     setPainted(b);
+    sliceK = 0;                          // next slice starts its own mean
+  }
+  // the slice still forming: fold this frame into its running mean, in place,
+  // so no frame is discarded while the slit crosses the slice's own width
+  if (integrate && !passComplete && (pos() - painted())*d > 0){
+    const a = painted(), b = a + d*w;
+    sliceK++;
+    paint(Math.min(a,b), Math.max(a,b), 1/sliceK);
   }
   // the pass ends wherever it ends; paint the short remainder so the last
   // slice isn't dropped and the picture doesn't stop short of the edge
   if (passComplete && (pos() - painted())*d > 0){
-    paint(Math.min(painted(),pos()), Math.max(painted(),pos()));
+    paint(Math.min(painted(),pos()), Math.max(painted(),pos()), 1);
     setPainted(pos());
+    sliceK = 0;
   }
 }
 
@@ -1035,7 +1116,7 @@ function stepBurst(dt){
 }
 
 /* one ring of the burst, between radii r0 (inner) and r1 (outer) */
-function paintRing(a, b){
+function paintRing(a, b, alpha = 1){
   let r0 = Math.min(a,b), r1 = Math.max(a,b);
   r0 = Math.max(r0, 0);
   if (r1 <= 0) return;
@@ -1048,14 +1129,15 @@ function paintRing(a, b){
   // an expanding ring trails at r0, a contracting one at r1. Feathering is
   // skipped while an expanding ring is still at the pivot: extending it
   // inward past 0 would fade out the one point every Burst shares.
-  const atPivot = dir() > 0 && r0 <= FEATHER;
-  if (!S.smooth || atPivot){
-    ax.save(); ring(ax, r0, r1); ax.clip();
+  const F = featherPx();
+  const atPivot = dir() > 0 && r0 <= F;
+  if (!S.smooth || F < 1 || atPivot){
+    ax.save(); ax.globalAlpha = alpha; ring(ax, r0, r1); ax.clip();
     drawSource(ax); ax.restore();
     return;
   }
   const back = dir() > 0 ? r0 : r1;
-  const ext  = dir() > 0 ? r0 - FEATHER : r1 + FEATHER;
+  const ext  = dir() > 0 ? r0 - F : r1 + F;
 
   ensureFeather();
   fx.clearRect(0,0,W,H);
@@ -1072,7 +1154,7 @@ function paintRing(a, b){
   fx.fillStyle = g; fx.fillRect(0,0,W,H);
   fx.restore();
 
-  ax.drawImage(fthCv, 0, 0);
+  ax.save(); ax.globalAlpha = alpha; ax.drawImage(fthCv, 0, 0); ax.restore();
 }
 
 /* Field: a live band in the middle, two slits running outward from it in
@@ -1137,7 +1219,7 @@ function stepStrip(dt){
     if (stripX + adv >= stripCap){
       passComplete = true;
     } else {
-      const F = S.smooth ? Math.min(FEATHER, stripX) : 0;
+      const F = S.smooth ? Math.min(featherPx(), stripX) : 0;
       if (!F){
         // clip to the new slot, then shift the WHOLE live frame left so its
         // own right edge lands exactly on that slot — the fixed source column
@@ -1684,7 +1766,32 @@ function exportCanvas(){
    session instead of every frame.                                      */
 const DB_NAME = 'spliiit', STORE = 'captures';
 const ROLL_MAX = 40, ROLL_BYTES = 250e6;
-let db = null, rollCount = 0, rollBytes = 0, seq = 0;
+let db = null, rollCount = 0, rollBytes = 0;
+
+/* Capture numbering. The old name carried a timestamp, which made it unique
+   for free; "Split 01" has to earn that. The store is keyed on the name, so a
+   repeat would silently OVERWRITE an earlier capture — and an in-memory
+   counter would repeat on every reload. So the next number is read from the
+   roll itself, once, then handed out from memory.
+
+   Primed through a shared promise so two captures racing the first call can't
+   both scan and both land on the same number. The claim itself (nextNum++) is
+   synchronous immediately after that await, so concurrent captures get
+   distinct numbers even while one is still encoding. */
+const NAME_RE = /^Split (\d+)/;
+let nextNum = 0, numReady = null;
+function primeNames(){
+  if (!numReady) numReady = rollAll()
+    .then(all => {
+      let max = 0;
+      for (const r of all){ const m = NAME_RE.exec(r.name); if (m) max = Math.max(max, +m[1]); }
+      nextNum = max + 1;
+    })
+    .catch(() => { nextNum = 1; });
+  return numReady;
+}
+// after a wipe there is nothing left to collide with, so numbering restarts
+function resetNames(){ numReady = null; nextNum = 0; }
 
 function idb(){
   return new Promise((res, rej) => {
@@ -1714,35 +1821,78 @@ const rollPut = rec  => txReq('readwrite', st => st.put(rec));
 const rollAll = ()   => txReq('readonly',  st => st.getAll()).then(r => r || []);
 const rollDel = name => txReq('readwrite', st => st.delete(name)).catch(() => {});
 
-function stamp(){
-  const d = new Date(), p = n => String(n).padStart(2,'0');
-  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-`
-       + `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+/* ── milestones ───────────────────────────────────────────────────────
+   Counts are lifetime, so unlike every setting in this app they have to
+   survive a launch. localStorage throws outright in some private modes, so
+   both ends are guarded and a failure just means no milestones rather than
+   no capture.
+
+   Fired on a delay: snack() drives one shared element, so calling it again
+   immediately would cancel the "Saved Split 01" toast that just appeared. */
+const STATS_KEY = 'spliiit-stats';
+const SHOT_MILESTONES = new Map([
+  [1,    'First spliiit capture. Time is an axis now.'],
+  [24,   'Muybridge territory.'],
+  [36,   'That’s a roll of film.'],
+  [100,  '100 spliiits. Photo-finish territory.'],
+  [500,  'Five hundred. This is a practice now.'],
+  [1000, 'A thousand. The stargate took fewer.'],
+]);
+const MODES_ALL = ['swipe','burst','strip'];
+const loadStats = () => { try{ return JSON.parse(localStorage.getItem(STATS_KEY)) || {}; }
+                          catch(e){ return {}; } };
+const saveStats = st => { try{ localStorage.setItem(STATS_KEY, JSON.stringify(st)); }
+                          catch(e){} };
+function milestone(msg){ setTimeout(() => snack(msg, 3400), 2600); }
+
+function recordShot(mode){
+  const st = loadStats();
+  st.shots = (st.shots || 0) + 1;
+  st.modes = st.modes || {};
+  st.modes[mode] = true;
+  const hit = SHOT_MILESTONES.get(st.shots);
+  const used = MODES_ALL.filter(m => st.modes[m]).length;
+  // one at a time: a count milestone outranks the nudge on a tie
+  if (hit) milestone(hit);
+  // a nudge, not an award: it fires the once you have captured in a second
+  // mode but not yet the third, which is the only point at which "try all
+  // modes" is still worth saying. Marked spent either way, so reaching all
+  // three without passing through the prompt doesn't leave it armed.
+  else if (!st.nudgedModes && used >= 2) milestone('Try all modes.');
+  if (used >= 2) st.nudgedModes = true;
+  saveStats(st);
 }
 
 async function archiveSnapshot(shot){
   if (!shot || !S.autoSave) return;
   // read the label BEFORE awaiting — switching shape during the encode
   // would otherwise stamp the next shape's name onto this capture
-  const mode = S.mode, at = Date.now(), n = ++seq, when = stamp();
+  const mode = S.mode, at = Date.now();
+  await primeNames();
+  const n = nextNum++;                      // synchronous claim; see primeNames
   const blob = await new Promise(r => shot.toBlob(r, 'image/png'));
   if (!blob) return;
-  const name = `spliiit-${when}-${mode}-${String(n).padStart(3,'0')}.png`;
+  const name = `Split ${String(n).padStart(2,'0')}.png`;
   try{
     await rollPut({ name, blob, at, size: blob.size, mode });
+    recordShot(mode);
     await pruneRoll();
     await refreshRoll();
-    snack('Saved ' + name, 2400);
+    snack('Saved ' + name.replace(/\.png$/,''), 2400);
   } catch(e){ snack('Could not archive: ' + (e.message||e), 4000); }
 }
 
+let warnedFull = false;
 async function pruneRoll(){                    // oldest out first
   const all = (await rollAll()).sort((a,b) => a.at - b.at);
   let bytes = all.reduce((n,r) => n + r.size, 0);
+  let evicted = 0;
   while (all.length > ROLL_MAX || bytes > ROLL_BYTES){
     const old = all.shift(); if (!old) break;
-    bytes -= old.size; await rollDel(old.name);
+    bytes -= old.size; await rollDel(old.name); evicted++;
   }
+  // worth saying once — silently losing captures is worse than a toast
+  if (evicted && !warnedFull){ warnedFull = true; milestone('Roll is full. Download or oldest spliiits start dropping.'); }
 }
 async function refreshRoll(){
   const all = await rollAll();
@@ -1868,7 +2018,7 @@ async function saveAll(){
   const all = (await rollAll())
     .filter(r => !picked.size || picked.has(r.name))
     .sort((a,b) => a.at - b.at);
-  if (!all.length) return snack('Roll is empty.', 2000);
+  if (!all.length) return snack('No spliiits.', 2000);
   const files = all.map(r => new File([r.blob], r.name, {type:'image/png'}));
   try{
     if (navigator.canShare && navigator.canShare({files})){
@@ -1881,7 +2031,7 @@ async function saveAll(){
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     await new Promise(r => setTimeout(r, 150));
   }
-  snack(`Saved ${files.length} images`, 2800);
+  snack(`Saved ${files.length} spliiit${files.length===1?'':'s'}`, 2800);
   closeSheets(); freeRollUrls();
 }
 
@@ -1890,6 +2040,7 @@ async function performClearAll(){
   const all = await rollAll();
   if (!all.length) return;
   for (const r of all) await rollDel(r.name);
+  resetNames();
   await refreshRoll();
   await openRoll();
   snack('Roll cleared', 1600);
@@ -1936,7 +2087,7 @@ $('segMode').addEventListener('click', e => {
 });
 $('sSlice').addEventListener('input', e => setSlice(+e.target.value, true));
 function setSlice(v){
-  S.slice = clamp(Math.round(v), 1, 60);
+  S.slice = clamp(Math.round(v), 1, SLICE_MAX);
   $('sSlice').value = S.slice;
   $('oSliceFine').textContent = S.slice;
   $('rateVal').textContent = S.slice;          // the bar pill
@@ -1956,6 +2107,7 @@ $('segAuto').addEventListener('click', e => {
 });
 $('btnClearRoll').addEventListener('click', async () => {
   for (const r of await rollAll()) await rollDel(r.name);
+  resetNames();
   await refreshRoll(); snack('Roll cleared', 1600);
 });
 
@@ -1977,7 +2129,7 @@ function applyMode(){
   if (typeof aaEligible === 'function'){
     $('gl').hidden = !aaEligible(); $('acc').hidden = !!aaEligible();
   }
-  $('sSlice').max = 60;
+  $('sSlice').max = SLICE_MAX;
   setSlice(clamp(S.slice, 1, +$('sSlice').max));
   // Strip has no centre to grab; the other three shapes still get one
   $('grpPivot').hidden = S.mode === 'strip';
@@ -2011,18 +2163,18 @@ function setDir(dir, announce){
   }
   S.manual = false;
   clearAcc();
-  if (announce) snack('Slit from ' + dir, 1300);
+  if (announce) snack('Slit ' + dir, 1300);
 }
 
 function applySwipe(drag){
   if (S.mode === 'swipe') return setDir(SWIPE_OPPOSITE[drag], true);
-  if (S.mode === 'strip') return snack('Strip is fixed at the right edge.', 1500);
+  if (S.mode === 'strip') return snack('Sorry, Strip is fixed.', 1500);
 
   if (S.mode === 'burst'){
     S.reverse = (drag === 'down');
     ringR = ringPrev = ringPaint = S.reverse ? maxRadius() : 0;
     clearAcc();
-    return snack(S.reverse ? 'Burst inward' : 'Burst outward', 1300);
+    return snack(S.reverse ? 'Burst in' : 'Burst out', 1300);
   }
 
   if (drag === 'up' || drag === 'down'){
@@ -2126,7 +2278,7 @@ async function useCamera(facing, quiet){
     if (!quiet)
       snack(n==='NotAllowedError' ? 'Camera blocked. Safari ▸ aA ▸ Website Settings ▸ Camera ▸ Allow.'
           : n==='NotFoundError'   ? 'No camera on this device.'
-          : n==='NotReadableError'? 'Camera busy — close other apps.'
+          : n==='NotReadableError'? 'Camera busy, close other apps.'
           : e && e.message==='NoFrames' ? 'Camera sent no frames. Reload and retry.'
           : 'Couldn’t open camera: '+(n||'unknown'), 5000);
     throw e;
@@ -2138,7 +2290,7 @@ async function useCamera(facing, quiet){
    wherever you left it. A tap with no drag resets to 1px.
    The ruler carries values, not presets — every integer 1..60 is reachable,
    which is the whole 60-stop range the settings sheet exposes. */
-const SLICE_MIN = 1, SLICE_MAX = 60;
+const SLICE_MIN = 1, SLICE_MAX = 30;
 const SCRUB_SLOP = 5;         // px before a press counts as a drag, not a tap
 /* px of thumb travel per 1px of slice. Derived, not chosen: the range has to
    span exactly half the screen so 1px sits at the pill and 60px lands on the
@@ -2216,6 +2368,18 @@ rateBtn.addEventListener('pointermove', ev => {
 $('btnAA').addEventListener('click', () => {
   aaSetOn(!AA.on);
 });
+/* Flip from the top bar. When a camera is already live this swaps facing;
+   when it is not — permission refused, or still on the placeholder — the
+   useful move is to start the one we last wanted rather than to flip away
+   from a feed that was never running. useCamera reports its own failures, so
+   the catch is a no-op; it is attached immediately because a rejection that
+   is only handled later gets flagged as unhandled. */
+$('btnFlip').addEventListener('click', () => {
+  const live = src.kind === 'camera';
+  const next = live ? (src.facing === 'user' ? 'environment' : 'user') : src.facing;
+  useCamera(next).catch(() => {});
+});
+
 $('segSource').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   const k = b.dataset.source;
