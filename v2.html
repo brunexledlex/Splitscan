@@ -1939,7 +1939,7 @@ async function saveAll(){
   const all = (await rollAll())
     .filter(r => !picked.size || picked.has(r.name))
     .sort((a,b) => a.at - b.at);
-  if (!all.length) return snack('Roll is empty.', 2000);
+  if (!all.length) return snack('No spliiits.', 2000);
   const files = all.map(r => new File([r.blob], r.name, {type:'image/png'}));
   try{
     if (navigator.canShare && navigator.canShare({files})){
@@ -1952,7 +1952,7 @@ async function saveAll(){
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     await new Promise(r => setTimeout(r, 150));
   }
-  snack(`Saved ${files.length} images`, 2800);
+  snack(`Saved ${files.length} spliiit${files.length===1?'':'s'}`, 2800);
   closeSheets(); freeRollUrls();
 }
 
@@ -2082,18 +2082,18 @@ function setDir(dir, announce){
   }
   S.manual = false;
   clearAcc();
-  if (announce) snack('Slit from ' + dir, 1300);
+  if (announce) snack('Slit ' + dir, 1300);
 }
 
 function applySwipe(drag){
   if (S.mode === 'swipe') return setDir(SWIPE_OPPOSITE[drag], true);
-  if (S.mode === 'strip') return snack('Strip is fixed at the right edge.', 1500);
+  if (S.mode === 'strip') return snack('Sorry, Strip is fixed.', 1500);
 
   if (S.mode === 'burst'){
     S.reverse = (drag === 'down');
     ringR = ringPrev = ringPaint = S.reverse ? maxRadius() : 0;
     clearAcc();
-    return snack(S.reverse ? 'Burst inward' : 'Burst outward', 1300);
+    return snack(S.reverse ? 'Burst in' : 'Burst out', 1300);
   }
 
   if (drag === 'up' || drag === 'down'){
@@ -2197,7 +2197,7 @@ async function useCamera(facing, quiet){
     if (!quiet)
       snack(n==='NotAllowedError' ? 'Camera blocked. Safari ▸ aA ▸ Website Settings ▸ Camera ▸ Allow.'
           : n==='NotFoundError'   ? 'No camera on this device.'
-          : n==='NotReadableError'? 'Camera busy — close other apps.'
+          : n==='NotReadableError'? 'Camera busy, close other apps.'
           : e && e.message==='NoFrames' ? 'Camera sent no frames. Reload and retry.'
           : 'Couldn’t open camera: '+(n||'unknown'), 5000);
     throw e;
