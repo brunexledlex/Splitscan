@@ -44,7 +44,7 @@
 
   /* Inter resolves on desktop where it is installed; iOS has no Inter, so
      SF Pro carries it — same neo-grotesque proportions at 12px */
-  --sans:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+  --sans:'Helvetica Neue',Helvetica,Arial,sans-serif;
   --mono:var(--sans);
 
   --safe-t:env(safe-area-inset-top);
@@ -60,7 +60,7 @@
 html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
 body{
   background:var(--surface); color:var(--on-surface);
-  font-family:var(--sans); font-size:15px;
+  font-family:var(--sans); font-size:17px;
   -webkit-user-select:none; user-select:none;
   height:100dvh; position:relative;
 }
@@ -120,7 +120,7 @@ body.roll-open #hud{opacity:0}
 }
 #segMode button{
   flex:1 1 0;min-width:0;gap:7px;
-  font-size:12px;line-height:15px;color:var(--mint-dim);
+  font-size:14px;line-height:15px;color:var(--mint-dim);
   padding:0 4px;border-radius:50px;
   display:flex;align-items:center;justify-content:center;
   transition:background .15s var(--ease),color .15s var(--ease);
@@ -140,7 +140,7 @@ body.roll-open #hud{opacity:0}
   -webkit-mask:var(--ico) no-repeat center/contain;
   mask:var(--ico) no-repeat center/contain;
 }
-.modes figcaption{font-size:11px;color:var(--on-surface-var);margin-top:6px}
+.modes figcaption{font-size:13px;color:var(--on-surface-var);margin-top:6px}
 
 /* Rate and Warp: floating pills over the image, right above the
    bar — the same look they had inside it, just no longer sharing its row. */
@@ -149,7 +149,7 @@ body.roll-open #hud{opacity:0}
   bottom:calc(var(--bar-h) + var(--safe-b) + 12px);
   height:35px;border-radius:50px;background:var(--black);color:var(--mint);
   display:flex;align-items:center;justify-content:center;gap:4px;
-  padding:0 14px;font-size:12px;line-height:15px;white-space:nowrap;
+  padding:0 14px;font-size:14px;line-height:15px;white-space:nowrap;
   box-shadow:0 2px 10px rgba(0,0,0,.35);        /* was on solid mint; now on the image */
 }
 /* Rate sits at the VERTICAL CENTRE, not with the other bottom pills: it is
@@ -278,8 +278,8 @@ body.roll-open #hud{opacity:0}
 .sheet.on{transform:translateY(0)}
 .grabber{width:32px;height:4px;border-radius:2px;background:var(--outline-var);
   margin:12px auto 4px}
-.sheet h2{font-size:16px;font-weight:600;margin:12px 0 2px}
-.sheet .hint{font-size:12px;color:var(--on-surface-var);margin:0 0 10px}
+.sheet h2{font-size:18px;font-weight:600;margin:12px 0 2px}
+.sheet .hint{font-size:14px;color:var(--on-surface-var);margin:0 0 10px}
 .group{margin:14px 0}
 /* a white card on the mint sheet: the one block here that is a note rather
    than a control, so it stops looking like a setting with no switch */
@@ -291,33 +291,33 @@ body.roll-open #hud{opacity:0}
    that caption the switches — scoped so those stay as they are */
 .group.callout > .label{
   margin-bottom:10px;
-  font-size:15px;font-weight:700;letter-spacing:.02em;color:var(--black);
+  font-size:17px;font-weight:700;letter-spacing:.02em;color:var(--black);
 }
 /* the callout is prose, not a control label — it gets read, so it is set
    larger and looser than the 12px hints that annotate the switches */
-.group.callout .hint{font-size:14px;line-height:1.5;color:var(--black)}
+.group.callout .hint{font-size:16px;line-height:1.5;color:var(--black)}
 .callout-links{
   display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:14px;
 }
 .callout-links a{
   display:inline-flex;align-items:center;gap:6px;
-  font-size:13px;font-weight:600;color:var(--black);
+  font-size:15px;font-weight:600;color:var(--black);
   text-decoration:underline;text-underline-offset:3px;
 }
 .callout-links svg{width:15px;height:15px;fill:currentColor;display:block;flex:0 0 auto}
 .group > .label{
-  font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  font-size:13px;letter-spacing:.09em;text-transform:uppercase;
   color:var(--on-surface-var);margin-bottom:8px;display:flex;gap:8px;align-items:baseline;
 }
 .group > .label output{
   margin-left:auto;font-family:var(--mono);font-variant-numeric:tabular-nums;
-  color:var(--primary);letter-spacing:0;text-transform:none;font-size:12px;
+  color:var(--primary);letter-spacing:0;text-transform:none;font-size:14px;
 }
 
 /* M3 segmented button */
 .seg{display:flex;border:1px solid var(--outline);border-radius:999px;overflow:hidden}
 .seg button{
-  flex:1;min-height:48px;padding:0 8px;font-size:13px;font-weight:500;
+  flex:1;min-height:48px;padding:0 8px;font-size:15px;font-weight:500;
   color:var(--on-surface);border-right:1px solid var(--outline);
   display:flex;align-items:center;justify-content:center;gap:5px;
 }
@@ -328,7 +328,7 @@ body.roll-open #hud{opacity:0}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{
   min-height:48px;padding:0 16px;border-radius:8px;
-  border:1px solid var(--outline);font-size:13px;font-weight:500;
+  border:1px solid var(--outline);font-size:15px;font-weight:500;
   display:flex;align-items:center;gap:6px;color:var(--on-surface);
 }
 .chip[aria-pressed="true"]{background:var(--p-container);color:var(--on-p-container);border-color:transparent}
@@ -359,7 +359,7 @@ body.roll-open #hud{opacity:0}
 #rollBadge{
   position:absolute;top:-7px;right:-7px;min-width:19px;height:19px;padding:0 5px;
   border-radius:10px;background:var(--mint);color:var(--black);
-  font-size:10px;line-height:19px;text-align:center;font-weight:700;
+  font-size:12px;line-height:19px;text-align:center;font-weight:700;
 }
 /* A real roll: a narrow, full-height film strip rather than a centred card.
    Black ground (its own thumbnails carry all the colour), full-width frames
@@ -378,7 +378,7 @@ body.roll-open #hud{opacity:0}
   display:block;padding:0;
 }
 .card.roll.on{transform:translateX(-50%) rotate(5deg) scale(1)}
-.card.roll .card-title{color:var(--mint);font-size:13px}
+.card.roll .card-title{color:var(--mint);font-size:15px}
 #rollCount{color:#fff}
 
 /* the ribbon itself: fills the tilted container edge to edge, no rounding
@@ -403,7 +403,7 @@ body.roll-open #hud{opacity:0}
 }
 #rollGrid:empty::after{
   content:'Go do some spliiits';text-align:center;
-  font-size:13px;color:rgba(255,255,255,.55);padding:16px 0 0;
+  font-size:15px;color:rgba(255,255,255,.55);padding:16px 0 0;
 }
 /* fixed frame height, full width — a real roll shows every exposure at the
    same size, whatever the source capture's own aspect ratio */
@@ -452,7 +452,7 @@ body.roll-open #hud{opacity:0}
 .cpill.primary{
   background:var(--mint);color:var(--black);
   width:137px;height:137px;border-radius:50%;
-  font-size:24px;font-weight:700;
+  font-size:26px;font-weight:700;
 }
 /* sized to its label and centred on the SCREEN, not on the tilted card —
    which is why it lives outside that card in the markup. z-index 6 clears
@@ -495,7 +495,7 @@ body.roll-open #hud{opacity:0}
   padding:10px 12px;border-radius:14px;
 }
 .roll-head-actions{display:flex;align-items:center;gap:12px;flex:0 0 auto}
-.roll-text-btn{font-size:12px;font-weight:600;color:var(--mint-dim)}
+.roll-text-btn{font-size:14px;font-weight:600;color:var(--mint-dim)}
 .roll-x{
   width:26px;height:26px;border-radius:50%;flex:0 0 auto;
   display:grid;place-items:center;background:rgba(255,255,255,.1);color:var(--mint);
@@ -529,13 +529,13 @@ body.roll-open #hud{opacity:0}
 }
 .card.on{opacity:1;transform:translate(-50%,0) scale(1);pointer-events:auto}
 .card-title{
-  align-self:stretch;font-size:12px;line-height:15px;font-weight:700;
+  align-self:stretch;font-size:14px;line-height:15px;font-weight:700;
   color:var(--black);
 }
 .cpill{
   align-self:stretch;height:35px;border-radius:40px;
   background:var(--black);color:var(--mint);
-  font-size:12px;line-height:15px;
+  font-size:14px;line-height:15px;
   display:flex;align-items:center;justify-content:center;
   transition:transform .12s var(--ease);
 }
@@ -555,14 +555,14 @@ body.roll-open #hud{opacity:0}
 .opt .ico{width:44px;height:44px;border-radius:50%;
   background:var(--p-container);display:grid;place-items:center}
 .opt .ico svg{width:24px;height:24px;fill:var(--on-p-container)}
-.opt b{font-size:15px;font-weight:500;text-align:center;line-height:1.2}
-.opt > span:last-child{font-size:12px;color:var(--on-surface-var);
+.opt b{font-size:17px;font-weight:500;text-align:center;line-height:1.2}
+.opt > span:last-child{font-size:14px;color:var(--on-surface-var);
   font-family:var(--mono);font-variant-numeric:tabular-nums}
 .opt[hidden] ~ .opt, .opts:has(.opt[hidden]){grid-template-columns:1fr}
 
 .actions{display:flex;gap:10px;margin:16px 0 4px}
 .btn{
-  flex:1;min-height:48px;border-radius:999px;font-size:14px;font-weight:500;
+  flex:1;min-height:48px;border-radius:999px;font-size:16px;font-weight:500;
   display:flex;align-items:center;justify-content:center;gap:8px;
   border:1px solid var(--outline);color:var(--on-surface);
 }
@@ -589,7 +589,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   /* white, not the mint-surface ink: the toast sits on dark grey, where
      black text was near-illegible after the rebrand */
   background:var(--s-container-highest);color:#FFFFFF;
-  border-radius:8px;padding:14px 16px;font-size:14px;
+  border-radius:8px;padding:14px 16px;font-size:16px;
   box-shadow:0 3px 14px rgba(0,0,0,.5);
   /* translateX(-50%) is the centring, not animation — it has to be carried
      on BOTH states or the toast jumps half its width when it opens */
@@ -1326,7 +1326,7 @@ function drawHud(){
   const u = Math.max(1, Math.min(W,H)/420);
   const a = .16 + .84*glow;
   hx.lineWidth = 1.5*u;
-  hx.font = `${11*u}px ${getComputedStyle(document.body).getPropertyValue('--sans')}`;
+  hx.font = `${13*u}px ${getComputedStyle(document.body).getPropertyValue('--sans')}`;
   hx.textAlign = 'center'; hx.textBaseline = 'middle';
 
   if (S.mode === 'burst'){                     // radius ruler
