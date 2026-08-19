@@ -1820,15 +1820,14 @@ const rollDel = name => txReq('readwrite', st => st.delete(name)).catch(() => {}
    immediately would cancel the "Saved Split 01" toast that just appeared. */
 const STATS_KEY = 'spliiit-stats';
 const SHOT_MILESTONES = new Map([
-  [1,    'First spliiit. Time is an axis now.'],
-  [10,   'Ten spliiits.'],
-  [25,   '25 — Lartigue only needed one.'],
-  [50,   'Fifty. That’s a roll of film.'],
+  [1,    'First spliiit capture. Time is an axis now.'],
+  [24,   'Muybridge territory.'],
+  [36,   'That’s a roll of film.'],
   [100,  '100 spliiits. Photo-finish territory.'],
-  [250,  '250. Muybridge managed with 24.'],
   [500,  'Five hundred. This is a practice now.'],
   [1000, 'A thousand. The stargate took fewer.'],
 ]);
+const MODES_ALL = ['swipe','burst','strip'];
 const loadStats = () => { try{ return JSON.parse(localStorage.getItem(STATS_KEY)) || {}; }
                           catch(e){ return {}; } };
 const saveStats = st => { try{ localStorage.setItem(STATS_KEY, JSON.stringify(st)); }
@@ -1841,12 +1840,15 @@ function recordShot(mode){
   st.modes = st.modes || {};
   st.modes[mode] = true;
   const hit = SHOT_MILESTONES.get(st.shots);
-  // one at a time: a count milestone outranks the shapes one on a tie
+  const used = MODES_ALL.filter(m => st.modes[m]).length;
+  // one at a time: a count milestone outranks the nudge on a tie
   if (hit) milestone(hit);
-  else if (!st.allModes && ['swipe','burst','strip'].every(m => st.modes[m])){
-    st.allModes = true;
-    milestone('Swipe, Burst, Strip — you’ve used all three.');
-  }
+  // a nudge, not an award: it fires the once you have captured in a second
+  // mode but not yet the third, which is the only point at which "try all
+  // modes" is still worth saying. Marked spent either way, so reaching all
+  // three without passing through the prompt doesn't leave it armed.
+  else if (!st.nudgedModes && used >= 2) milestone('Try all modes.');
+  if (used >= 2) st.nudgedModes = true;
   saveStats(st);
 }
 
@@ -1879,7 +1881,7 @@ async function pruneRoll(){                    // oldest out first
     bytes -= old.size; await rollDel(old.name); evicted++;
   }
   // worth saying once — silently losing captures is worse than a toast
-  if (evicted && !warnedFull){ warnedFull = true; milestone('Roll is full — oldest spliiits start dropping.'); }
+  if (evicted && !warnedFull){ warnedFull = true; milestone('Roll is full. Download or oldest spliiits start dropping.'); }
 }
 async function refreshRoll(){
   const all = await rollAll();
