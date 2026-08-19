@@ -1755,7 +1755,32 @@ function exportCanvas(){
    session instead of every frame.                                      */
 const DB_NAME = 'spliiit', STORE = 'captures';
 const ROLL_MAX = 40, ROLL_BYTES = 250e6;
-let db = null, rollCount = 0, rollBytes = 0, seq = 0;
+let db = null, rollCount = 0, rollBytes = 0;
+
+/* Capture numbering. The old name carried a timestamp, which made it unique
+   for free; "Split 01" has to earn that. The store is keyed on the name, so a
+   repeat would silently OVERWRITE an earlier capture — and an in-memory
+   counter would repeat on every reload. So the next number is read from the
+   roll itself, once, then handed out from memory.
+
+   Primed through a shared promise so two captures racing the first call can't
+   both scan and both land on the same number. The claim itself (nextNum++) is
+   synchronous immediately after that await, so concurrent captures get
+   distinct numbers even while one is still encoding. */
+const NAME_RE = /^Split (\d+)/;
+let nextNum = 0, numReady = null;
+function primeNames(){
+  if (!numReady) numReady = rollAll()
+    .then(all => {
+      let max = 0;
+      for (const r of all){ const m = NAME_RE.exec(r.name); if (m) max = Math.max(max, +m[1]); }
+      nextNum = max + 1;
+    })
+    .catch(() => { nextNum = 1; });
+  return numReady;
+}
+// after a wipe there is nothing left to collide with, so numbering restarts
+function resetNames(){ numReady = null; nextNum = 0; }
 
 function idb(){
   return new Promise((res, rej) => {
@@ -1785,25 +1810,21 @@ const rollPut = rec  => txReq('readwrite', st => st.put(rec));
 const rollAll = ()   => txReq('readonly',  st => st.getAll()).then(r => r || []);
 const rollDel = name => txReq('readwrite', st => st.delete(name)).catch(() => {});
 
-function stamp(){
-  const d = new Date(), p = n => String(n).padStart(2,'0');
-  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-`
-       + `${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
-}
-
 async function archiveSnapshot(shot){
   if (!shot || !S.autoSave) return;
   // read the label BEFORE awaiting — switching shape during the encode
   // would otherwise stamp the next shape's name onto this capture
-  const mode = S.mode, at = Date.now(), n = ++seq, when = stamp();
+  const mode = S.mode, at = Date.now();
+  await primeNames();
+  const n = nextNum++;                      // synchronous claim; see primeNames
   const blob = await new Promise(r => shot.toBlob(r, 'image/png'));
   if (!blob) return;
-  const name = `spliiit-${when}-${mode}-${String(n).padStart(3,'0')}.png`;
+  const name = `Split ${String(n).padStart(2,'0')}.png`;
   try{
     await rollPut({ name, blob, at, size: blob.size, mode });
     await pruneRoll();
     await refreshRoll();
-    snack('Saved ' + name, 2400);
+    snack('Saved ' + name.replace(/\.png$/,''), 2400);
   } catch(e){ snack('Could not archive: ' + (e.message||e), 4000); }
 }
 
@@ -1961,6 +1982,7 @@ async function performClearAll(){
   const all = await rollAll();
   if (!all.length) return;
   for (const r of all) await rollDel(r.name);
+  resetNames();
   await refreshRoll();
   await openRoll();
   snack('Roll cleared', 1600);
@@ -2027,6 +2049,7 @@ $('segAuto').addEventListener('click', e => {
 });
 $('btnClearRoll').addEventListener('click', async () => {
   for (const r of await rollAll()) await rollDel(r.name);
+  resetNames();
   await refreshRoll(); snack('Roll cleared', 1600);
 });
 
