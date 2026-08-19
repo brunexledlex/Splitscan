@@ -603,7 +603,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 </div>
 <button class="pill" id="btnRate" aria-label="Slice thickness — drag to change, tap to reset"
   ><span id="rateIco"></span><span id="rateVal">1</span> px</button>
-<button id="btnAA" class="pill" aria-pressed="false" aria-label="Warp"><span
+<!-- hidden, not removed: aaSetOn still syncs its aria-pressed and the click
+     handler still binds to it, so the element has to stay in the DOM. Warp
+     remains reachable from Settings. Drop the attribute to bring it back. -->
+<button id="btnAA" class="pill" hidden aria-pressed="false" aria-label="Warp"><span
   class="lg">Warp</span><span class="sm">Warp</span></button>
 
 <div id="bar">
