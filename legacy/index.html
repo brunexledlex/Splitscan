@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0D0A08">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Splitscan">
+<meta name="description" content="Angled and rotating slit-scan camera.">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../assets/icon-180.png">
+<link rel="icon" href="../assets/icon-192.png">
+<title>Splitscan — angled &amp; rotating</title>
+<style>
+/* ── darkroom instrument ───────────────────────────────────────────────
+   Committed single-theme: a viewfinder stays dark. Every colour is
+   painted explicitly so the page holds on any host ground.            */
+:root{
+  --ground:#0D0A08;      /* bituminous, warm-biased black */
+  --panel:#17120E;       /* anodized body */
+  --raised:#211A15;      /* raised control */
+  --line:#33281F;        /* warm hairline */
+  --ink:#EDE4D8;         /* fiber-print white */
+  --dim:#9C8E7E;         /* warm grey */
+  --faint:#6B5F52;
+  --amber:#FF9A2E;       /* safelight — anything live */
+  --amber-ink:#1A0F02;
+  --rec:#FF3B30;         /* record only */
+
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+
+  --deck-pad:calc(12px + env(safe-area-inset-bottom));
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:15px; line-height:1.4;
+  -webkit-user-select:none; user-select:none;
+  display:flex; flex-direction:column;
+  height:100dvh;
+}
+button,input,select{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:4px}
+/* .ctl sets display:flex, which would otherwise beat the hidden attribute */
+[hidden]{display:none !important}
+
+/* ── top rail ─────────────────────────────────────────────────────── */
+.rail{
+  flex:0 0 auto; display:flex; align-items:center; gap:10px;
+  padding:calc(8px + env(safe-area-inset-top)) 14px 8px;
+  border-bottom:1px solid var(--line); background:var(--panel);
+}
+.mark{
+  display:flex; align-items:center; gap:7px;
+  font-weight:800; font-size:13px; letter-spacing:-.02em; text-transform:uppercase;
+}
+.mark i{display:block;width:3px;height:15px;background:var(--amber);transform:skewX(-14deg)}
+.readout{
+  margin-left:auto; display:flex; align-items:center; gap:12px;
+  font-family:var(--mono); font-size:11px; font-variant-numeric:tabular-nums;
+  color:var(--dim); white-space:nowrap;
+}
+.readout b{color:var(--amber);font-weight:500}
+.icobtn{
+  width:32px;height:32px;display:grid;place-items:center;
+  border:1px solid var(--line);background:var(--raised);color:var(--dim);
+}
+.icobtn[aria-pressed="true"]{color:var(--amber);border-color:var(--amber)}
+.icobtn svg{width:18px;height:18px;fill:currentColor}
+
+/* ── stage ────────────────────────────────────────────────────────── */
+.stage{
+  flex:1 1 auto; position:relative; min-height:0;
+  background:
+    repeating-linear-gradient(45deg,#100C09 0 8px,#0D0A08 8px 16px);
+  touch-action:none;
+}
+.stage canvas{
+  position:absolute; inset:0; width:100%; height:100%;
+  object-fit:contain; display:block;
+}
+#hud{pointer-events:none}
+#hud.hidden{display:none}
+
+.hint{
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  text-align:center; color:var(--faint); font-family:var(--mono); font-size:12px;
+  letter-spacing:.08em; text-transform:uppercase; pointer-events:none;
+}
+
+/* ── control deck ─────────────────────────────────────────────────── */
+.deck{
+  flex:0 0 auto; background:var(--panel); border-top:1px solid var(--line);
+  padding:10px 14px var(--deck-pad);
+  display:flex; flex-direction:column; gap:10px;
+}
+/* must live here, not inline: an inline display:flex would beat the
+   collapsed rule below and the grab handle would do nothing */
+.collapsible{display:flex;flex-direction:column;gap:10px}
+.deck.collapsed .collapsible{display:none}
+
+.segrow{display:flex;gap:8px;align-items:center}
+.seg{
+  flex:1 1 0; display:flex; border:1px solid var(--line); background:var(--ground);
+}
+.seg button{
+  flex:1 1 0; padding:8px 4px; font-size:11px; font-weight:600;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--dim);
+  border-right:1px solid var(--line);
+}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--amber);color:var(--amber-ink)}
+
+/* sliders */
+.ctl{display:flex;flex-direction:column;gap:5px}
+.ctl-head{
+  display:flex;align-items:baseline;gap:8px;
+  font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);
+}
+.ctl-head output{
+  margin-left:auto;font-family:var(--mono);font-size:12px;
+  font-variant-numeric:tabular-nums;color:var(--ink);letter-spacing:0;
+  text-transform:none;   /* units are lowercase: 40°/s, not 40°/S */
+}
+.ctl.driven .ctl-head,.ctl.driven output{color:var(--amber)}
+
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:22px;background:none;margin:0;
+  touch-action:none;
+}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line)}
+input[type=range]::-moz-range-track{height:2px;background:var(--line)}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:12px;height:22px;margin-top:-10px;
+  background:var(--ink);border:0;
+}
+input[type=range]::-moz-range-thumb{width:12px;height:22px;background:var(--ink);border:0;border-radius:0}
+input[type=range]:disabled::-webkit-slider-thumb{background:var(--amber)}
+input[type=range]:disabled::-moz-range-thumb{background:var(--amber)}
+input[type=range]:disabled{opacity:1}
+
+.actions{display:flex;gap:8px}
+.btn{
+  flex:1 1 0; padding:11px 8px; border:1px solid var(--line); background:var(--raised);
+  font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink);
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.btn svg{width:15px;height:15px;fill:currentColor}
+.btn.primary{background:var(--amber);color:var(--amber-ink);border-color:var(--amber)}
+.btn[aria-pressed="true"]{border-color:var(--rec);color:var(--rec)}
+
+.grab{
+  align-self:center;width:36px;height:4px;background:var(--line);
+  margin:-4px 0 2px;flex:0 0 auto;
+}
+
+/* the source video: on-screen so iOS keeps decoding it, but invisible */
+#vid{position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:.01;
+  pointer-events:none;z-index:-1;object-fit:cover}
+
+.toast{
+  position:fixed;left:50%;bottom:calc(50% - 20px);transform:translateX(-50%);
+  background:var(--raised);border:1px solid var(--amber);color:var(--ink);
+  padding:10px 14px;font-size:13px;max-width:80vw;text-align:center;
+  opacity:0;transition:opacity .2s;pointer-events:none;z-index:9;
+}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+
+@media (min-height:740px){ .deck{gap:13px;padding-top:13px} }
+
+/* short phones: the viewfinder must stay bigger than the controls */
+@media (max-height:700px){
+  .deck{gap:7px;padding:7px 12px var(--deck-pad)}
+  .collapsible{gap:7px}
+  .seg button{padding:6px 4px}
+  .ctl{gap:2px}
+  input[type=range]{height:18px}
+  input[type=range]::-webkit-slider-thumb{height:18px;margin-top:-8px}
+  input[type=range]::-moz-range-thumb{height:18px}
+  .btn{padding:9px 6px}
+  .grab{margin:-2px 0 0}
+}
+</style>
+</head>
+<body>
+
+<div class="rail">
+  <div class="mark"><i></i>Splitscan</div>
+  <div class="readout">
+    <span id="rMode">RADIAL</span>
+    <span>θ <b id="rAngle">000.0°</b></span>
+    <span id="rFps">–– fps</span>
+  </div>
+  <button class="icobtn" id="btnGuides" aria-pressed="true" title="Guides" aria-label="Toggle guides">
+    <svg viewBox="0 0 24 24"><path d="M12 5C6.5 5 2.7 9.1 1 12c1.7 2.9 5.5 7 11 7s9.3-4.1 11-7c-1.7-2.9-5.5-7-11-7zm0 12a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg>
+  </button>
+</div>
+
+<div class="stage" id="stage">
+  <canvas id="acc"></canvas>
+  <canvas id="hud"></canvas>
+  <div class="hint" id="hint">Choose a source below</div>
+</div>
+
+<div class="deck" id="deck">
+  <button class="grab" id="grab" aria-label="Collapse controls"></button>
+
+  <!-- the primary control, sitting straight under the image; outside
+       .collapsible so it survives collapsing the rest of the deck -->
+  <div class="ctl" id="ctlAngle">
+    <div class="ctl-head"><span>Angle</span><output id="oAngle">0°</output></div>
+    <input type="range" id="sAngle" min="0" max="360" step="0.5" value="0" aria-label="Slit angle">
+  </div>
+
+  <div class="segrow">
+    <div class="seg" id="segMode" role="group" aria-label="Slit geometry">
+      <button data-mode="sweep">Sweep</button>
+      <button data-mode="radial" aria-pressed="true">Radial</button>
+      <button data-mode="strip">Strip</button>
+    </div>
+  </div>
+
+  <div class="collapsible">
+
+    <div class="segrow">
+      <div class="seg" id="segDrive" role="group" aria-label="Drive">
+        <button data-drive="auto" aria-pressed="true">Auto</button>
+        <button data-drive="manual">Manual</button>
+      </div>
+      <div class="seg" id="segBlades" role="group" aria-label="Blades">
+        <button data-blades="1" aria-pressed="true">1</button>
+        <button data-blades="2">2</button>
+        <button data-blades="3">3</button>
+        <button data-blades="4">4</button>
+      </div>
+    </div>
+
+    <div class="ctl" id="ctlPos" hidden>
+      <div class="ctl-head"><span>Position</span><output id="oPos">50%</output></div>
+      <input type="range" id="sPos" min="0" max="100" step="0.2" value="50" aria-label="Sweep position">
+    </div>
+
+    <div class="ctl">
+      <div class="ctl-head"><span id="lWidth">Blade</span><output id="oWidth">2.0°</output></div>
+      <input type="range" id="sWidth" min="1" max="20" step="1" value="2" aria-label="Slit width">
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="btnSrc">
+        <svg viewBox="0 0 24 24"><path d="M4 5h3l2-2h6l2 2h3v14H4V5zm8 3a5 5 0 100 10 5 5 0 000-10z"/></svg>
+        Source
+      </button>
+      <button class="btn" id="btnFreeze" aria-pressed="false">
+        <svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+        Hold
+      </button>
+      <button class="btn" id="btnClear">
+        <svg viewBox="0 0 24 24"><path d="M6 7h12v13H6zM9 4h6l1 2H8z"/></svg>
+        Clear
+      </button>
+      <button class="btn primary" id="btnSave">
+        <svg viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5V3zm3 2v5h8V5H8zm4 8a3 3 0 100 6 3 3 0 000-6z"/></svg>
+        Save
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<!-- NOT hidden: iOS Safari won't decode frames from a display:none video,
+     so drawImage would silently paint nothing. Kept in the layout, invisible. -->
+<video id="vid" playsinline muted loop autoplay></video>
+<input type="file" id="file" accept="video/*" hidden>
+
+<script>
+(() => {
+'use strict';
+const DEG = Math.PI / 180;
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const wrapPi = a => { while (a >  Math.PI) a -= Math.PI*2;
+                      while (a < -Math.PI) a += Math.PI*2; return a; };
+
+/* ── canvases ─────────────────────────────────────────────────────────
+   #acc holds the artwork and is the only thing exported.
+   #hud carries the reticle so guides never bake into a saved frame.   */
+const acc = $('acc'), hud = $('hud');
+const ax = acc.getContext('2d'), hx = hud.getContext('2d');
+const scratch = document.createElement('canvas');
+const sx = scratch.getContext('2d');
+const video = $('vid');
+const demoCv = document.createElement('canvas');
+const dx = demoCv.getContext('2d');
+
+let W = 0, H = 0;                       // processing resolution
+
+const S = {
+  mode:'radial', drive:'auto',
+  angle:0, pos:50, speed:40, width:2, blades:1,
+  cx:.5, cy:.5, quality:900, frozen:false, guides:true,
+};
+
+const src = { el:null, w:0, h:0, kind:null, mirror:false, stream:null, facing:'environment' };
+
+let phi = 0, sweepS = 0, sweepPrev = 0, stripAcc = 0;
+let last = 0, fps = 0, fpsN = 0, fpsT = 0, running = false;
+
+/* ── toast ───────────────────────────────────────────────────────── */
+let toastT = 0;
+function toast(msg, ms = 2600){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms);
+}
+
+/* ── demo source ──────────────────────────────────────────────────────
+   High-contrast moving edges — the content that makes slit-scan
+   artefacts legible. Runs so the app is usable before granting camera. */
+demoCv.width = 1280; demoCv.height = 720;
+let demoT = 0;
+function renderDemo(dt){
+  demoT += dt;
+  const w = demoCv.width, h = demoCv.height, t = demoT;
+  dx.fillStyle = '#0D0A08'; dx.fillRect(0,0,w,h);
+
+  // travelling colour bars
+  const bars = ['#FF9A2E','#EDE4D8','#2EC4FF','#FF3B30','#8CFF6B'];
+  for (let i = 0; i < 26; i++){
+    const x = ((i * 96 - t * 190) % (w + 200) + w + 200) % (w + 200) - 100;
+    dx.fillStyle = bars[i % bars.length];
+    dx.globalAlpha = .85;
+    dx.fillRect(x, 0, 26, h);
+  }
+  dx.globalAlpha = 1;
+
+  // rotating spokes
+  dx.save(); dx.translate(w/2, h/2); dx.rotate(t * .55);
+  for (let i = 0; i < 12; i++){
+    dx.rotate(Math.PI*2/12);
+    dx.fillStyle = i % 2 ? '#0D0A08' : '#EDE4D8';
+    dx.beginPath(); dx.moveTo(0,0); dx.arc(0,0,240,-.13,.13); dx.closePath(); dx.fill();
+  }
+  dx.restore();
+
+  // bouncing dot
+  const bx = w/2 + Math.sin(t*2.1) * (w*.42);
+  const by = h/2 + Math.cos(t*3.3) * (h*.36);
+  dx.fillStyle = '#FF9A2E';
+  dx.beginPath(); dx.arc(bx, by, 34, 0, Math.PI*2); dx.fill();
+  dx.fillStyle = '#0D0A08';
+  dx.beginPath(); dx.arc(bx, by, 14, 0, Math.PI*2); dx.fill();
+}
+
+/* ── sizing ──────────────────────────────────────────────────────── */
+function resize(){
+  if (!src.w || !src.h) return;
+  const long = S.quality;
+  const s = long / Math.max(src.w, src.h);
+  const nw = Math.round(src.w * s), nh = Math.round(src.h * s);
+  if (nw === W && nh === H) return;
+  W = nw; H = nh;
+  acc.width = hud.width = scratch.width = W;
+  acc.height = hud.height = scratch.height = H;
+  clearAcc();
+}
+function clearAcc(){
+  ax.setTransform(1,0,0,1,0,0);
+  ax.fillStyle = '#0D0A08'; ax.fillRect(0,0,W,H);
+  sweepS = sweepPrev = -sweepLength()/2; stripAcc = 0;
+}
+
+/* ── source painting ─────────────────────────────────────────────── */
+function drawSource(ctx){
+  if (!src.el || !src.w) return;
+  const s = Math.max(W/src.w, H/src.h);
+  const dw = src.w*s, dh = src.h*s, ox = (W-dw)/2, oy = (H-dh)/2;
+  if (src.mirror){
+    ctx.save(); ctx.translate(W,0); ctx.scale(-1,1);
+    ctx.drawImage(src.el, ox, oy, dw, dh); ctx.restore();
+  } else {
+    ctx.drawImage(src.el, ox, oy, dw, dh);
+  }
+}
+
+/* ── geometry: radial ─────────────────────────────────────────────── */
+function stepRadial(dt){
+  const a0 = phi;
+  if (S.drive === 'auto') phi += S.speed * DEG * dt;
+  else                    phi += wrapPi(S.angle * DEG - phi);
+  if (S.frozen) return;
+
+  let lo = Math.min(a0, phi), hi = Math.max(a0, phi);
+  // a big manual jump shouldn't repaint the whole disc
+  if (hi - lo > Math.PI) { hi = phi; lo = phi - S.width*DEG; }
+  const minW = Math.max(S.width, .25) * DEG;
+  if (hi - lo < minW){ const m = (lo+hi)/2; lo = m - minW/2; hi = m + minW/2; }
+
+  const R = Math.hypot(W,H), px = S.cx*W, py = S.cy*H;
+  for (let k = 0; k < S.blades; k++){
+    const off = k * Math.PI*2 / S.blades;
+    ax.save(); ax.beginPath(); ax.moveTo(px,py);
+    ax.arc(px, py, R, lo+off, hi+off); ax.closePath(); ax.clip();
+    drawSource(ax); ax.restore();
+  }
+}
+
+/* ── geometry: sweep ──────────────────────────────────────────────── */
+function sweepLength(){
+  const th = S.angle * DEG;
+  return Math.abs(-Math.sin(th))*W + Math.abs(Math.cos(th))*H;
+}
+function stepSweep(dt){
+  const th = S.angle * DEG;
+  const nx = -Math.sin(th), ny = Math.cos(th);   // travel direction
+  const dxv = Math.cos(th), dyv = Math.sin(th);  // along the slit
+  const L = sweepLength();
+
+  sweepPrev = sweepS;
+  if (S.drive === 'auto'){
+    sweepS += S.speed * dt;
+    if (sweepS > L/2){ sweepS = -L/2; sweepPrev = -L/2; }   // loop without a giant band
+  } else {
+    sweepS = (S.pos/100 - .5) * L;
+    if (Math.abs(sweepS - sweepPrev) > L/2) sweepPrev = sweepS;
+  }
+  if (S.frozen) return;
+
+  let lo = Math.min(sweepPrev, sweepS), hi = Math.max(sweepPrev, sweepS);
+  const minW = Math.max(S.width, .5);
+  if (hi - lo < minW){ const m = (lo+hi)/2; lo = m - minW/2; hi = m + minW/2; }
+
+  const D = Math.hypot(W,H), cx = W/2, cy = H/2;
+  ax.save(); ax.beginPath();
+  ax.moveTo(cx + nx*lo - dxv*D, cy + ny*lo - dyv*D);
+  ax.lineTo(cx + nx*lo + dxv*D, cy + ny*lo + dyv*D);
+  ax.lineTo(cx + nx*hi + dxv*D, cy + ny*hi + dyv*D);
+  ax.lineTo(cx + nx*hi - dxv*D, cy + ny*hi - dyv*D);
+  ax.closePath(); ax.clip();
+  drawSource(ax); ax.restore();
+}
+
+/* ── geometry: strip ──────────────────────────────────────────────────
+   Classic stacking scan: one slice per frame appended at the right
+   edge. The sample line may rotate, which fans the stack.            */
+function stepStrip(dt){
+  if (S.drive === 'auto') S.angle = (S.angle + S.speed * dt) % 360;
+  if (S.frozen) return;
+
+  stripAcc += Math.max(S.width, .5);
+  const adv = Math.floor(stripAcc);
+  if (adv < 1) return;
+  stripAcc -= adv;
+
+  // ping-pong shift left (self-blit is unreliable across engines)
+  sx.setTransform(1,0,0,1,0,0);
+  sx.clearRect(0,0,W,H);
+  sx.drawImage(acc, 0, 0);
+  ax.setTransform(1,0,0,1,0,0);
+  ax.fillStyle = '#0D0A08'; ax.fillRect(0,0,W,H);
+  ax.drawImage(scratch, -adv, 0);
+
+  // write the new slice: rotate the source so its angled sample line
+  // lands vertical inside the right-edge strip
+  const th = S.angle * DEG;
+  ax.save();
+  ax.beginPath(); ax.rect(W - adv, 0, adv, H); ax.clip();
+  ax.translate(W - adv/2, H/2);
+  ax.rotate(Math.PI/2 - th);
+  ax.translate(-S.cx*W, -S.cy*H);
+  drawSource(ax);
+  ax.restore();
+}
+
+/* ── reticle ──────────────────────────────────────────────────────── */
+function drawHud(){
+  hx.setTransform(1,0,0,1,0,0);
+  hx.clearRect(0,0,W,H);
+  if (!S.guides || !src.el) return;
+
+  const u = Math.max(1, Math.min(W,H)/420);   // scale strokes to canvas
+  hx.lineWidth = 1.5*u;
+  hx.font = `${11*u}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+  hx.textAlign = 'center'; hx.textBaseline = 'middle';
+
+  if (S.mode === 'radial'){
+    const px = S.cx*W, py = S.cy*H;
+    const R = Math.min(W,H) * .38;
+
+    // bezel: ticks every 15°, labelled every 90° — the focus ring for time
+    hx.strokeStyle = 'rgba(237,228,216,.30)';
+    hx.beginPath(); hx.arc(px,py,R,0,Math.PI*2); hx.stroke();
+    for (let a = 0; a < 360; a += 15){
+      const r = a % 90 === 0 ? R - 13*u : R - 6*u;
+      const c = Math.cos(a*DEG), s = Math.sin(a*DEG);
+      hx.beginPath();
+      hx.moveTo(px + c*R, py + s*R);
+      hx.lineTo(px + c*r, py + s*r);
+      hx.strokeStyle = a % 90 === 0 ? 'rgba(237,228,216,.65)' : 'rgba(237,228,216,.25)';
+      hx.stroke();
+    }
+    hx.fillStyle = 'rgba(237,228,216,.55)';
+    for (let a = 0; a < 360; a += 90){
+      const c = Math.cos(a*DEG), s = Math.sin(a*DEG);
+      hx.fillText(String(a).padStart(3,'0'), px + c*(R-26*u), py + s*(R-26*u));
+    }
+
+    // the live blade
+    const D = Math.hypot(W,H);
+    for (let k = 0; k < S.blades; k++){
+      const a = phi + k*Math.PI*2/S.blades;
+      hx.strokeStyle = k ? 'rgba(255,154,46,.35)' : 'rgba(255,154,46,.95)';
+      hx.beginPath(); hx.moveTo(px,py);
+      hx.lineTo(px + Math.cos(a)*D, py + Math.sin(a)*D); hx.stroke();
+    }
+    // centre handle
+    hx.strokeStyle = 'rgba(255,154,46,.9)';
+    hx.beginPath(); hx.arc(px,py,7*u,0,Math.PI*2); hx.stroke();
+    hx.beginPath();
+    hx.moveTo(px-13*u,py); hx.lineTo(px-9*u,py);
+    hx.moveTo(px+9*u,py);  hx.lineTo(px+13*u,py);
+    hx.moveTo(px,py-13*u); hx.lineTo(px,py-9*u);
+    hx.moveTo(px,py+9*u);  hx.lineTo(px,py+13*u);
+    hx.stroke();
+
+  } else if (S.mode === 'sweep'){
+    const th = S.angle*DEG;
+    const nx = -Math.sin(th), ny = Math.cos(th);
+    const dxv = Math.cos(th), dyv = Math.sin(th);
+    const D = Math.hypot(W,H), cx = W/2, cy = H/2;
+    const bx = cx + nx*sweepS, by = cy + ny*sweepS;
+
+    // travel track
+    const L = sweepLength();
+    hx.strokeStyle = 'rgba(237,228,216,.20)';
+    hx.beginPath();
+    hx.moveTo(cx - nx*L/2, cy - ny*L/2);
+    hx.lineTo(cx + nx*L/2, cy + ny*L/2); hx.stroke();
+
+    hx.strokeStyle = 'rgba(255,154,46,.95)';
+    hx.beginPath();
+    hx.moveTo(bx - dxv*D, by - dyv*D);
+    hx.lineTo(bx + dxv*D, by + dyv*D); hx.stroke();
+    hx.beginPath(); hx.arc(bx,by,5*u,0,Math.PI*2); hx.stroke();
+
+  } else {
+    const th = S.angle*DEG;
+    const D = Math.hypot(W,H), px = S.cx*W, py = S.cy*H;
+    hx.strokeStyle = 'rgba(255,154,46,.95)';
+    hx.beginPath();
+    hx.moveTo(px - Math.cos(th)*D, py - Math.sin(th)*D);
+    hx.lineTo(px + Math.cos(th)*D, py + Math.sin(th)*D); hx.stroke();
+    // write head
+    hx.strokeStyle = 'rgba(237,228,216,.5)';
+    hx.beginPath(); hx.moveTo(W-1.5*u, 0); hx.lineTo(W-1.5*u, H); hx.stroke();
+  }
+}
+
+/* ── loop ─────────────────────────────────────────────────────────── */
+function frame(dt){
+  if (src.kind === 'demo') renderDemo(dt);
+  if (!src.el || !W) return;
+
+  if      (S.mode === 'radial') stepRadial(dt);
+  else if (S.mode === 'sweep')  stepSweep(dt);
+  else                          stepStrip(dt);
+
+  drawHud();
+  syncReadouts();
+}
+
+function tick(now){
+  requestAnimationFrame(tick);
+  const dt = last ? Math.min((now - last)/1000, .1) : 0;
+  last = now;
+  fpsN++; if (now - fpsT > 500){ fps = fpsN*1000/(now-fpsT); fpsN = 0; fpsT = now; }
+  frame(dt);
+}
+
+function syncReadouts(){
+  const aDeg = S.mode === 'radial'
+    ? ((phi/DEG % 360) + 360) % 360
+    : S.angle;
+  $('rAngle').textContent = aDeg.toFixed(1).padStart(5,'0') + '°';
+  $('rFps').textContent = fps ? fps.toFixed(0).padStart(2,'0') + ' fps' : '–– fps';
+
+  // in Auto the driven slider becomes a live readout of the machine
+  if (S.drive === 'auto'){
+    if (S.mode === 'sweep'){
+      const L = sweepLength(), p = clamp((sweepS/L + .5)*100, 0, 100);
+      $('sPos').value = p; $('oPos').textContent = p.toFixed(0) + '%';
+    } else {
+      $('sAngle').value = aDeg; $('oAngle').textContent = aDeg.toFixed(0) + '°';
+    }
+  }
+}
+
+/* ── sources ──────────────────────────────────────────────────────── */
+function stopStream(){
+  if (src.stream){ src.stream.getTracks().forEach(t => t.stop()); src.stream = null; }
+}
+function useDemo(){
+  stopStream(); video.srcObject = null; video.removeAttribute('src'); video.load?.();
+  src.el = demoCv; src.w = demoCv.width; src.h = demoCv.height;
+  src.kind = 'demo'; src.mirror = false;
+  $('hint').style.display = 'none';
+  resize(); clearAcc();
+}
+/* iOS resolves play() before metadata arrives, so videoWidth is still 0 and
+   both resize() and drawSource() bail out — a live stream on a black canvas.
+   Wait for real dimensions before treating the video as a source. */
+function waitForFrames(ms = 8000){
+  return new Promise((res, rej) => {
+    const t0 = performance.now();
+    (function check(){
+      if (video.videoWidth > 0 && video.videoHeight > 0) return res();
+      if (performance.now() - t0 > ms) return rej(new Error('NoFrames'));
+      requestAnimationFrame(check);
+    })();
+  });
+}
+
+async function useCamera(facing){
+  if (!navigator.mediaDevices?.getUserMedia){
+    toast(window.isSecureContext ? 'This browser has no camera API.'
+      : 'Camera needs HTTPS. Open the hosted address, not a file.'); return;
+  }
+  try{
+    stopStream();
+    toast('Starting camera…', 8000);
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode: facing, width:{ideal:1280}, height:{ideal:720} }, audio:false });
+    src.stream = stream; src.facing = facing;
+    video.removeAttribute('src');            // clear any previous file source
+    video.srcObject = stream;
+    await video.play().catch(() => {});      // iOS may reject; frames still come
+    await waitForFrames();
+    src.el = video; src.w = video.videoWidth; src.h = video.videoHeight;
+    src.kind = 'camera'; src.mirror = (facing === 'user');
+    $('hint').style.display = 'none';
+    resize(); clearAcc();
+    toast(`${facing === 'user' ? 'Front' : 'Rear'} camera · ${src.w}×${src.h}`, 1600);
+  } catch(e){
+    stopStream();
+    const n = e && e.name;
+    toast(
+      n === 'NotAllowedError' ? 'Camera blocked. Safari ▸ aA ▸ Website Settings ▸ Camera ▸ Allow, then reload.'
+      : n === 'NotFoundError' ? 'No camera found on this device.'
+      : n === 'NotReadableError' ? 'Camera is busy — close other apps using it.'
+      : e && e.message === 'NoFrames' ? 'Camera opened but sent no frames. Reload and try again.'
+      : 'Couldn’t open the camera: ' + (n || 'unknown'), 5000);
+  }
+}
+async function useFile(f){
+  stopStream();
+  video.srcObject = null;
+  const url = URL.createObjectURL(f);
+  video.src = url;
+  try{
+    await video.play().catch(() => {});
+    await waitForFrames();                   // same iOS metadata race as camera
+    src.el = video; src.w = video.videoWidth; src.h = video.videoHeight;
+    src.kind = 'file'; src.mirror = false;
+    $('hint').style.display = 'none';
+    resize(); clearAcc();
+    toast(`${f.name} · ${src.w}×${src.h}`, 1600);
+  } catch(e){
+    URL.revokeObjectURL(url);
+    toast('Couldn’t read that video. Try a different file.', 4000);
+  }
+}
+
+/* ── mode plumbing ────────────────────────────────────────────────── */
+function press(group, attr, val){
+  [...group.children].forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === String(val))));
+}
+function applyMode(){
+  press($('segMode'), 'mode', S.mode);
+  press($('segBlades'), 'blades', S.blades);
+  $('btnGuides').setAttribute('aria-pressed', String(S.guides));
+  $('rMode').textContent = S.mode.toUpperCase();
+  const radial = S.mode === 'radial', sweep = S.mode === 'sweep';
+
+  $('segBlades').style.display = radial ? '' : 'none';
+  $('ctlPos').hidden = !sweep;
+
+  // width means a different thing per geometry — label it honestly.
+  // speed has no control any more, so each geometry gets a fixed rate in
+  // its own units: px/s for Sweep, °/s for Radial and Strip.
+  // width steps in whole units, never fractions
+  if (sweep){
+    $('lWidth').textContent = 'Slit';
+    S.speed = 200;
+    $('sWidth').min = 1; $('sWidth').max = 60;   S.width = clamp(S.width, 1, 60);
+  } else if (radial){
+    $('lWidth').textContent = 'Blade';
+    S.speed = 40;
+    $('sWidth').min = 1; $('sWidth').max = 20;   S.width = clamp(S.width, 1, 20);
+  } else {
+    $('lWidth').textContent = 'Rate';
+    S.speed = 20;
+    $('sWidth').min = 1; $('sWidth').max = 12;   S.width = clamp(S.width, 1, 12);
+  }
+  S.width = Math.round(S.width);
+  $('sWidth').value = S.width;
+  applyDrive(); syncUnits(); clearAcc();
+}
+function applyDrive(){
+  press($('segDrive'), 'drive', S.drive);
+  const auto = S.drive === 'auto';
+  // driven control is disabled-but-live: it reads out the machine
+  const driven = (S.mode === 'sweep') ? $('ctlPos') : $('ctlAngle');
+  const other  = (S.mode === 'sweep') ? $('ctlAngle') : null;
+  [$('ctlAngle'), $('ctlPos')].forEach(c => c.classList.remove('driven'));
+  $('sAngle').disabled = $('sPos').disabled = false;
+  if (auto){
+    driven.classList.add('driven');
+    driven.querySelector('input').disabled = true;
+  }
+  if (other) other.classList.remove('driven');
+}
+function syncUnits(){
+  $('oWidth').textContent = S.mode === 'radial'
+    ? S.width.toFixed(0) + '°' : S.width.toFixed(0) + ' px';
+  $('oAngle').textContent = S.angle.toFixed(0) + '°';
+  $('oPos').textContent   = S.pos.toFixed(0) + '%';
+}
+
+/* ── inputs ───────────────────────────────────────────────────────── */
+$('segMode').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.mode = b.dataset.mode; applyMode();
+});
+$('segDrive').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.drive = b.dataset.drive;
+  if (S.drive === 'manual' && S.mode === 'radial') S.angle = ((phi/DEG % 360)+360)%360, $('sAngle').value = S.angle;
+  applyDrive(); syncUnits();
+});
+$('segBlades').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  S.blades = +b.dataset.blades; press($('segBlades'), 'blades', S.blades); clearAcc();
+});
+$('sAngle').addEventListener('input', e => {
+  S.angle = +e.target.value;
+  if (S.mode === 'sweep') clearAcc();
+  syncUnits();
+});
+$('sPos').addEventListener('input',   e => { S.pos = +e.target.value; syncUnits(); });
+$('sWidth').addEventListener('input', e => { S.width = Math.round(+e.target.value); syncUnits(); });
+
+$('btnFreeze').addEventListener('click', e => {
+  S.frozen = !S.frozen;
+  e.currentTarget.setAttribute('aria-pressed', String(S.frozen));
+  toast(S.frozen ? 'Held — scan paused' : 'Scanning', 1200);
+});
+$('btnClear').addEventListener('click', clearAcc);
+$('btnGuides').addEventListener('click', e => {
+  S.guides = !S.guides;
+  e.currentTarget.setAttribute('aria-pressed', String(S.guides));
+  hud.classList.toggle('hidden', !S.guides);
+});
+$('grab').addEventListener('click', () => $('deck').classList.toggle('collapsed'));
+
+const CAM_OK = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+$('btnSrc').addEventListener('click', () => {
+  // say up front why the camera is unavailable rather than failing on tap
+  const note = CAM_OK ? '' : '  · needs https';
+  // each action fires straight from its own click — iOS only grants camera
+  // and file pickers inside a user gesture, and an await would drop it
+  chooseSource([
+    ['Rear camera'  + note, () => useCamera('environment')],
+    ['Front camera' + note, () => useCamera('user')],
+    ['Video file',          () => $('file').click()],
+    ['Demo',                () => useDemo()],
+  ]);
+});
+$('file').addEventListener('change', e => { if (e.target.files[0]) useFile(e.target.files[0]); });
+
+function chooseSource(opts){
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:20;background:rgba(13,10,8,.86);display:flex;flex-direction:column;justify-content:flex-end;padding:14px;gap:8px;padding-bottom:calc(14px + env(safe-area-inset-bottom))';
+  for (const [label, run] of opts){
+    const b = document.createElement('button');
+    b.className = 'btn'; b.textContent = label;
+    b.style.cssText = 'padding:15px;font-size:12px';
+    b.onclick = () => { wrap.remove(); run(); };   // synchronous: keeps the gesture
+    wrap.appendChild(b);
+  }
+  const c = document.createElement('button');
+  c.className = 'btn'; c.textContent = 'Cancel';
+  c.style.cssText = 'padding:15px;font-size:12px;opacity:.6';
+  c.onclick = () => wrap.remove();
+  wrap.appendChild(c);
+  document.body.appendChild(wrap);
+}
+
+/* ── save / share ─────────────────────────────────────────────────── */
+$('btnSave').addEventListener('click', () => {
+  acc.toBlob(async blob => {
+    if (!blob) return toast('Nothing to save yet.');
+    const file = new File([blob], 'slitscan.png', {type:'image/png'});
+    try{
+      if (navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({files:[file]});   // iOS share sheet → Save Image
+        return;
+      }
+    } catch(e){ if (e && e.name === 'AbortError') return; }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'slitscan.png'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast('Saved slitscan.png');
+  }, 'image/png');
+});
+
+/* ── direct manipulation on the image ─────────────────────────────────
+   Grab the frame and spin time. Near the centre handle you drag the
+   pivot instead; anywhere else you drive the slit.                    */
+const stage = $('stage');
+let dragging = null;
+
+function toCanvas(ev){
+  const r = acc.getBoundingClientRect();
+  const s = Math.min(r.width/W, r.height/H);
+  const ox = (r.width - W*s)/2, oy = (r.height - H*s)/2;
+  return { x:(ev.clientX - r.left - ox)/s, y:(ev.clientY - r.top - oy)/s };
+}
+stage.addEventListener('pointerdown', ev => {
+  if (!src.el || !W) return;
+  stage.setPointerCapture(ev.pointerId);
+  const p = toCanvas(ev);
+  const u = Math.max(1, Math.min(W,H)/420);
+  if ((S.mode === 'radial' || S.mode === 'strip') &&
+      Math.hypot(p.x - S.cx*W, p.y - S.cy*H) < 22*u){
+    dragging = 'centre';
+  } else {
+    dragging = 'drive';
+    if (S.drive !== 'manual'){ S.drive = 'manual'; applyDrive(); }
+  }
+  onDrag(ev);
+});
+stage.addEventListener('pointermove', ev => { if (dragging) onDrag(ev); });
+['pointerup','pointercancel'].forEach(t =>
+  stage.addEventListener(t, () => { dragging = null; }));
+
+function onDrag(ev){
+  const p = toCanvas(ev);
+  if (dragging === 'centre'){
+    S.cx = clamp(p.x/W, 0, 1); S.cy = clamp(p.y/H, 0, 1);
+    return;
+  }
+  if (S.mode === 'sweep'){
+    const th = S.angle*DEG, nx = -Math.sin(th), ny = Math.cos(th);
+    const L = sweepLength();
+    const s = (p.x - W/2)*nx + (p.y - H/2)*ny;
+    S.pos = clamp((s/L + .5)*100, 0, 100);
+    $('sPos').value = S.pos;
+  } else {
+    const a = Math.atan2(p.y - S.cy*H, p.x - S.cx*W);
+    S.angle = ((a/DEG % 360) + 360) % 360;
+    $('sAngle').value = S.angle;
+  }
+  syncUnits();
+}
+
+/* keyboard nicety on desktop */
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === ' '){ e.preventDefault(); $('btnFreeze').click(); }
+  if (e.key === 'c') clearAcc();
+  if (e.key === 'g') $('btnGuides').click();
+});
+
+/* ── boot ─────────────────────────────────────────────────────────── */
+// offline shell, so the installed app opens with no server and no network.
+// GitHub Pages sends max-age=600 on every file including sw.js itself, so a
+// bare './sw.js' can be satisfied from the phone's own HTTP cache for up to
+// 10 minutes and look byte-identical even after a real deploy. The ?v= query
+// is a different cache key each release, forcing a genuine fetch. Bump it
+// whenever sw.js changes — it must match the CACHE constant inside sw.js.
+if ('serviceWorker' in navigator && window.isSecureContext){
+  addEventListener('load', () => navigator.serviceWorker.register('../sw.js?v=8').catch(() => {}));
+}
+document.addEventListener('visibilitychange', () => { last = 0; });
+applyMode();
+useDemo();
+requestAnimationFrame(tick);
+
+// exposed for debugging / automated checks: run n frames of synthetic time,
+// independent of rAF (which browsers throttle in background tabs)
+window.__slit = {
+  S, acc, hud, useDemo, useFile, useCamera, clearAcc, applyMode, src,
+  get phi(){ return phi; },
+  burn(n, dt = 1/60){ for (let i = 0; i < n; i++) frame(dt); },
+};
+})();
+</script>
+</body>
+</html>

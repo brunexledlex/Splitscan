@@ -7,7 +7,7 @@ This is a prototype and a design project. It is not a product, there is no app
 store listing, and it will probably never have one. It exists because I love
 photography, and because slit-scan images sit between photography and video and allow you to show space in constricted ways.
 
-**[Open the current build →](https://brunexledlex.github.io/Splitscan/v2.html)**
+**[Open the current build →](https://brunexledlex.github.io/Splitscan/)**
 
 ![Burst — a circular slit reading as a sunburst](examples/v2-burst.png)
 
@@ -136,8 +136,8 @@ does something before it asks for permissions.
 Two builds live side by side:
 
 ```
-v2.html      the current app — SPLIIIT, all three shapes, anti-aliasing, the roll
-index.html   the original prototype (Sweep / Radial / Strip, the darkroom UI)
+index.html          the app — SPLIIIT, all three shapes, Warp, the roll
+legacy/index.html   the original prototype (Sweep / Radial / Strip, darkroom UI)
 ```
 
 No build step, no dependencies. Serve the folder:

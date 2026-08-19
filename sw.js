@@ -13,21 +13,20 @@
    "whatever's-in-the-HTTP-cache-for-10-minutes-first". `{cache:'no-store'}`
    is what actually forces a live request. See registration in v2.html/
    index.html for the matching fix on the sw.js file itself. */
-const CACHE = 'slitscan-v7';
+const CACHE = 'slitscan-v8';
 const ASSETS = [
   './',
   './index.html',
-  './v2.html',
   './manifest.webmanifest',
-  './icon-192.png',
-  './icon-512.png',
-  './icon-180.png',
-  './placeholder.jpg',
-  './logo.svg',
-  './mode-swipe.svg',
-  './mode-burst.svg',
-  './mode-strip.svg',
-  './blank-roll.svg',
+  './assets/icon-192.png',
+  './assets/icon-512.png',
+  './assets/icon-180.png',
+  './assets/placeholder.jpg',
+  './assets/logo.svg',
+  './assets/mode-swipe.svg',
+  './assets/mode-burst.svg',
+  './assets/mode-strip.svg',
+  './assets/blank-roll.svg',
 ];
 
 self.addEventListener('install', e => {
