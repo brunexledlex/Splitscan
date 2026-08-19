@@ -589,6 +589,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <img id="rollThumb" alt="">
       <span id="rollBadge">0</span>
     </button>
+    <button class="icon-btn" id="btnFlip" aria-label="Switch camera"></button>
     <button class="icon-btn" id="btnTune" aria-label="Settings"></button>
   </div>
 </div>
@@ -790,6 +791,7 @@ const ICON = {
 };
 const svg = n => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${ICON[n]}"/></svg>`;
 $('btnTune').innerHTML = svg('settings');   // settings
+$('btnFlip').innerHTML = svg('cameraswitch');
 $('rateIco').innerHTML = svg('shutter_speed');
 // icons trail their labels, so they're appended rather than prepended
 $('lnkSite').insertAdjacentHTML('beforeend', svg('open_in_new'));
@@ -2259,6 +2261,18 @@ rateBtn.addEventListener('pointermove', ev => {
 $('btnAA').addEventListener('click', () => {
   aaSetOn(!AA.on);
 });
+/* Flip from the top bar. When a camera is already live this swaps facing;
+   when it is not — permission refused, or still on the placeholder — the
+   useful move is to start the one we last wanted rather than to flip away
+   from a feed that was never running. useCamera reports its own failures, so
+   the catch is a no-op; it is attached immediately because a rejection that
+   is only handled later gets flagged as unhandled. */
+$('btnFlip').addEventListener('click', () => {
+  const live = src.kind === 'camera';
+  const next = live ? (src.facing === 'user' ? 'environment' : 'user') : src.facing;
+  useCamera(next).catch(() => {});
+});
+
 $('segSource').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   const k = b.dataset.source;
