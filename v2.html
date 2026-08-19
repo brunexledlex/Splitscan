@@ -105,14 +105,14 @@ body.roll-open #hud{opacity:0}
   height:calc(var(--bar-h) + var(--safe-b));
   padding:0 15px var(--safe-b);
   background:var(--mint);
-  display:flex;align-items:center;justify-content:center;gap:10px;
+  display:flex;align-items:center;justify-content:center;
 }
 /* mode selector: one black pill, active mode gets the grey chip.
    Now the bar's only occupant, so it fills the width and each button
    shares it evenly rather than sizing to its own label. */
 #segMode{
   display:flex;align-items:stretch;gap:6px;padding:3px;
-  background:var(--black);border-radius:80px;height:39px;flex:1 1 auto;min-width:0;
+  background:var(--black);border-radius:80px;height:39px;width:100%;
 }
 #segMode button{
   flex:1 1 0;min-width:0;gap:7px;
@@ -327,10 +327,16 @@ body.roll-open #hud{opacity:0}
 .chip svg{width:18px;height:18px;fill:currentColor}
 
 /* roll: a thumbnail of the last capture, sat next to settings */
+/* over the image now, left of the shutter and centred on its axis, so the
+   two read as one row. The offset is derived from the shutter's own anchor
+   rather than guessed, so they stay aligned if either size changes. */
 #btnRoll{
-  position:relative;width:40px;height:40px;flex:0 0 40px;
-  border-radius:9px;border:2px solid var(--black);background:var(--black);
+  position:fixed;left:15px;z-index:3;
+  bottom:calc(var(--bar-h) + var(--safe-b) + 28px + (63px - 40px)/2);
+  width:40px;height:40px;
+  border-radius:9px;border:2px solid var(--mint);background:var(--black);
   display:grid;place-items:center;
+  box-shadow:0 2px 10px rgba(0,0,0,.35);
 }
 /* absolutely positioned, not a stretched grid item: place-items:center on
    the button sizes grid children to their own content, so width/height:100%
@@ -344,7 +350,7 @@ body.roll-open #hud{opacity:0}
 }
 #rollBadge{
   position:absolute;top:-7px;right:-7px;min-width:19px;height:19px;padding:0 5px;
-  border-radius:10px;background:var(--black);color:var(--mint);
+  border-radius:10px;background:var(--mint);color:var(--black);
   font-size:10px;line-height:19px;text-align:center;font-weight:700;
 }
 /* A real roll: a narrow, full-height film strip rather than a centred card.
@@ -614,6 +620,10 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 </div>
 
 <button id="shutter" aria-label="Capture"></button>
+<button id="btnRoll" hidden aria-label="Open roll">
+  <img id="rollThumb" alt="">
+  <span id="rollBadge">0</span>
+</button>
 
 <!-- floating over the live preview, right above the bar, so the mode
      selector below can have the bar to itself -->
@@ -629,10 +639,6 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   class="lg">Warp</span><span class="sm">Warp</span></button>
 
 <div id="bar">
-  <button id="btnRoll" hidden aria-label="Open roll">
-    <img id="rollThumb" alt="">
-    <span id="rollBadge">0</span>
-  </button>
   <div id="segMode" role="group" aria-label="Geometry">
     <button data-mode="swipe">Swipe</button>
     <button data-mode="burst" aria-pressed="true">Burst</button>
