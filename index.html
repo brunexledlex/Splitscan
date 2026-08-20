@@ -895,6 +895,7 @@ let stripCv = null, sxc = null, stripX = 0, stripAcc = 0, stripCap = 0;   // Str
 let fthCv = null, fx = null;               // Smoothing: full-frame scratch for Swipe/Field/Burst
 let passComplete = false;
 let last = 0, glow = 0, glowTarget = 0;            // barrel ghosting
+let waneT = 0;                                     // pulse clock, scanning only
 
 /* ── snackbar ─────────────────────────────────────────────────────── */
 let snackT = 0;
@@ -1336,6 +1337,22 @@ function handlePts(){
   return [{x:W/2+nx*w, y:H/2+ny*w}, {x:W/2-nx*w, y:H/2-ny*w}];
 }
 
+/* While a pass is running the instrument breathes — brightening as the
+   exposure starts, waning, and coming back on a ~1.6s cycle, so the guides
+   read as live without sitting at one flat value over the picture being
+   built. Returns 0 when not scanning so the drag bloom is the only thing
+   driving the instrument at rest.
+
+   This raises the guides rather than dimming them: glow only rises while a
+   finger is down, so during a hands-off pass the instrument alpha is
+   already ~.16 and multiplying a wane into it would be invisible. */
+const WANE_PERIOD = 1.6, WANE_LO = .28, WANE_HI = .9;
+function waneLevel(){
+  if (state !== 'scanning') return 0;
+  const k = (1 + Math.cos(waneT / WANE_PERIOD * TAU)) / 2;   // starts at 1
+  return WANE_LO + (WANE_HI - WANE_LO) * k;
+}
+
 function drawHud(){
   hx.setTransform(1,0,0,1,0,0);
   hx.clearRect(0,0,W,H);
@@ -1347,7 +1364,8 @@ function drawHud(){
   if (state === 'idle' && glow < .02) return;
 
   const u = Math.max(1, Math.min(W,H)/420);
-  const a = .16 + .84*glow;
+  // max, not sum: dragging mid-pass still blooms to full rather than clipping
+  const a = Math.max(.16 + .84*glow, waneLevel());
   hx.lineWidth = 1.5*u;
   hx.font = `${13*u}px ${getComputedStyle(document.body).getPropertyValue('--sans')}`;
   hx.textAlign = 'center'; hx.textBaseline = 'middle';
@@ -1688,6 +1706,7 @@ function frame(dt){
   if (!src.el || !W) return;
 
   glow += (glowTarget - glow) * Math.min(1, dt*8);
+  waneT += dt;
 
   if (aaEligible()){
     // live time-displacement: the whole image re-renders every tick.
@@ -1756,6 +1775,7 @@ function setState(next){
   } else {
     sh.classList.add('recording');
     sh.setAttribute('aria-label','Stop scan');
+    waneT = 0;                              // every pass starts at full brightness
     clearAcc();
   }
 }
@@ -2485,6 +2505,7 @@ window.__slit2 = {
   useDemo, useCamera, applyMode, exportCanvas,
   get W(){return W}, get H(){return H},
   get sweepS(){return sweepS}, get ringR(){return ringR}, get fieldD(){return fieldD},
+  get wane(){return waneLevel()},
   get stripX(){return stripX}, get stripCap(){return stripCap},
   get passComplete(){return passComplete}, get rollCount(){return rollCount},
   openRoll, archiveSnapshot, rollAll,
