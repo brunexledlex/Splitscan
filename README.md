@@ -1,233 +1,81 @@
 # SPLIIIT
 
-**A slit-scan browser camera for iPhone, with slitscanning beyond vertical and
-horizontal — a line, a burst, and a force field.**
+**A slit-scan browser camera for iPhone and web — four capture modes that reveal motion across time.**
 
-This is a prototype and a design project. It is not a product, there is no app
-store listing, and it will probably never have one. It exists because I love
-photography, and because slit-scan images sit between photography and video and allow you to show space in constricted ways.
+A slit-scan photographs a thin *slice* of the frame, over and over. One axis of the image becomes time instead of space, holding hundreds of moments in a single frame.
 
-**[Open the current build →](https://brunexledlex.github.io/Splitscan/)**
-
-![Burst — a circular slit reading as a sunburst](examples/v2-burst.png)
+**[Open the app →](https://brunexledlex.github.io/Splitscan/)**
 
 ---
 
-## What a slit-scan is
+## Four modes
 
-An ordinary photograph samples the whole frame at one instant. A slit-scan
-samples a *thin slice* of the frame, over and over, and lays the slices out in
-order. One axis of the resulting picture is no longer space — it is time.
-
-The consequence is strange and specific: a single still image can hold hundreds
-of different moments simultaneously, stitched into something that looks
-continuous but never existed.
-
-## Why
-
-Slit-scan keeps being reinvented, usually by accident, and always beautifully.
-
-**Photo-finish cameras**, from the 1930s onward, drew a moving strip of film past
-a narrow slit. The horizontal axis of those negatives is time, which is exactly
-why they settle a race: two horses that were never side by side appear side by
-side, ordered by when they crossed the line.
-
-**Jacques Henri Lartigue** photographed a car at the 1912 Grand Prix de l'Automobile
-Club de France with a focal-plane shutter travelling vertically while the car
-moved horizontally. The wheel leans into an oval; the spectators lean the other
-way. The distortion is the picture.
-
-**Marey and Muybridge** had already been taking time apart into frames a few
-decades earlier. Slit-scan is the same impulse run continuously instead of in
-steps — no frames, just a smear.
-
-**2001: A Space Odyssey** built its stargate corridor on a slit-scan rig: artwork,
-a slit, and a camera crawling along a track, one long exposure per frame.
-
-And your phone does it already, badly and by accident. A CMOS sensor reads out
-row by row rather than all at once, so the bottom of the frame is a few
-milliseconds younger than the top. **Rolling
-shutter is an uncontrolled slit-scan.** This app is the same effect with the
-controls put back in.
-
-## The shapes
-
-Every slit here is the same idea: time is a scalar field over the frame, and the
-slit is the contour where that field equals *now*. Only the distance function
-changes, which is why very different-looking effects share one engine.
-
-<table>
-<tr>
-<td width="33%" align="center"><img src="mode-swipe.svg" alt="Swipe" height="120"></td>
-<td width="33%" align="center"><img src="mode-burst.svg" alt="Burst" height="120"></td>
-<td width="33%" align="center"><img src="mode-strip.svg" alt="Strip" height="120"></td>
-</tr>
-<tr>
-<td align="center"><b>Swipe</b></td>
-<td align="center"><b>Burst</b></td>
-<td align="center"><b>Strip</b></td>
-</tr>
-</table>
-
-| Shape | The field | Reads as |
-|---|---|---|
-| **Swipe** | distance along a normal — a straight line, at any angle | Diagonal time. The classic slit-scan, freed from vertical/horizontal. |
-| **Burst** | distance from a centre — a ring | A sunburst. Anything moving smears along rays, because neighbouring radii are neighbouring moments. |
-| **Strip** | a fixed slit at the frame's edge | A photo-finish camera. The picture grows sideways without bound, one column per frame. |
-
-A fourth shape, **Field** — a live band down the middle with time peeling away
-from it in both directions — is built and works, but is currently not offered
-in the mode bar. Its code is intact; one line of markup brings it back.
-
-<table>
-<tr>
-<td width="33%"><img src="examples/v2-burst.png" alt="Burst — a circular slit"><br><sub><b>Burst</b> · sunburst</sub></td>
-<td width="33%"><img src="examples/v2-field.png" alt="Field — a force-field slit"><br><sub><b>Field</b> · retired from the bar, code intact</sub></td>
-<td width="33%"><img src="examples/v2-swipe-aa.png" alt="Swipe with anti-aliasing"><br><sub><b>Swipe</b> · angled, anti-aliased</sub></td>
-</tr>
-</table>
-
-Every image above came out of the app itself, scanning the built-in demo source
-— no camera, no post-processing.
+**Swipe** · a straight slit at any angle  
+**Burst** · a radial slit, reading as a sunburst  
+**Strip** · a fixed edge slit, like a photo-finish camera  
+**Field** · a live band down the centre (retired from the bar, code intact)
 
 ## Using it
 
-**Swipe the picture to choose the slit**, rather than aiming it by hand:
+**Swipe the screen** to aim the slit — up/down/left/right for Swipe, up/down to expand/contract Burst.
 
-| Shape | swipe | does |
-|---|---|---|
-| Swipe | up / down / left / right | the slit enters from behind the direction you dragged |
-| Burst | up / down | expands outward from the centre, or contracts inward |
-| Strip | — | the slit is fixed at the edge; there is nothing to aim |
+**Slice thickness** · Press the mint pill on the left edge and drag up: 1–60 pixels. Tap to reset to 1px.
 
-**Slice thickness is a scrub dial.** Press the pill at the left edge and drag: a
-ruler runs up over half the screen, 1px at the pill to 60px at the top. Release
-commits, a tap resets to 1px. Thicker slices mean fewer, chunkier bands, each
-from a single instant — the traverse rate is unchanged, so a pass still takes
-the same time whatever the setting.
+**Capture** · Tap the shutter. The slit runs its full traverse and the frame captures automatically. A second tap cuts the exposure early.
 
-**One press is one exposure.** Tap the shutter and the slit runs its full
-traverse — edge to edge for Swipe, centre to rim for Burst, band to edge for
-Field — and the picture is captured automatically the instant it finishes. The
-shutter ring is the progress meter. A second tap cuts the exposure short and
-captures where it stands.
+**Roll** · Top bar, left of Settings. Thumbnails of your session. Deselect unwanted captures, tap **Close**, and **Save** to export the rest.
 
-Every capture is **archived automatically** with a unique name — no dialog, no
-tap, straight back to a live feed so you can shoot again immediately. The
-**roll** — top bar, left of Settings — holds the session's captures as
-thumbnails. Open it, deselect anything you don't want, and **Save** hands the
-rest to the share sheet in one gesture, so twenty captures cost one tap rather
-than twenty.
+**Capture size** · Settings → Experimental. Screen (native resolution), Panorama (4000px), or Infinite (8000px cap). All show live pixel dimensions.
 
-**Anti-aliasing** (Settings) swaps the renderer for a WebGL engine that keeps a
-short rolling history of frames and samples it with sub-pixel and sub-frame
-interpolation, which is what removes the stair-stepping a slit-scan normally
-has along fast-moving edges. It costs real GPU memory, shown live in Settings,
-and is capped so it can't be pushed past what an iPhone can hold.
+**Anti-aliasing** (Experimental) · WebGL time-displacement engine. Keeps a rolling history of frames and sub-pixel/sub-frame interpolates them, removing stair-stepping at fast motion edges. GPU memory is shown live and capped to iPhone limits.
 
-**Capture size** follows the device by default — the true screen resolution, not
-a fixed export size — with a 2× option for when the source can support it.
+**Sources** · Rear camera, front camera, or built-in demo (works offline).
 
-Sources: rear camera, front camera, or a built-in synthetic demo so the app
-does something before it asks for permissions.
+## Deploy
 
-## Install
+No build step, no dependencies. The app is a single-page HTML file with embedded CSS and JS.
 
-Two builds live side by side:
-
-```
-index.html          the app — SPLIIIT, all three shapes, Warp, the roll
-legacy/index.html   the original prototype (Sweep / Radial / Strip, darkroom UI)
-```
-
-No build step, no dependencies. Serve the folder:
-
+Locally, serve the folder:
 ```bash
 python3 -m http.server 3468
 ```
 
-**The camera needs an `https://` origin.** Safari only exposes
-`navigator.mediaDevices` on a secure context — over plain `http://` to a LAN
-address it does not exist at all, and the app tells you so rather than failing
-on tap. `localhost` counts as secure; a LAN IP does not. The demo source works
-anywhere.
+**Camera requires HTTPS.** Safari only exposes `navigator.mediaDevices` over secure contexts; the demo source works anywhere.
 
-Served over HTTPS, open it in Safari on the phone and use **Share → Add to Home
-Screen**. It then launches fullscreen, and the service worker keeps it working
-with no network and no server. Pages are cached under their own URL, so `v2.html`
-and `index.html` update independently on the next online launch.
+On HTTPS, use **Share → Add to Home Screen** in Safari to install fullscreen. The service worker caches pages for offline use.
 
-## How it works
+## Implementation
 
-- **One time field, three shapes.** `stepFor()` dispatches to `stepSwipe` /
-  `stepBurst` / `stepField`, but all three paint with `clip()` + `drawImage()` —
-  never per-pixel — so an angled or curved slit costs the same as a straight
-  one, and each frame paints the whole span since the last tick rather than a
-  slit at one position, which is what keeps fast motion gap-free.
-- **The anti-aliasing engine is WebGL2.** A `TEXTURE_3D` ring buffer holds the
-  last *N* downscaled frames; every tick, one fragment shader pass re-renders
-  the whole image by computing each pixel's time and sampling the history at
-  that depth, with hardware bilinear filtering for the spatial axis and an
-  explicit blended tap for the temporal one. History resolution is decoupled
-  from output resolution, so a modest buffer reads as soft rather than blocky.
-- **The lime line is the slit itself**, not a decoration — drawn at full
-  strength in every state so there is always a visible reference for where the
-  scan is reading, on its own canvas so it never bakes into a capture.
-- **The roll is IndexedDB, not the photo library.** Safari requires a live user
-  gesture for both `navigator.share` and downloads, and a pass takes several
-  seconds — well past that window — so nothing can write to Photos
-  unattended. The roll is what makes one gesture cover a whole session instead
-  of one per capture.
-- **Capture follows the device.** Buffers accumulate at the viewport's own
-  aspect and true pixel density, guarded against iOS's canvas area ceiling,
-  rather than a fixed export size that would crop a portrait photo into a
-  landscape frame.
+- **Canvas 2D engine:** `clip()` + `drawImage()` to paint time fields. One `stepFor()` dispatch covers all modes.
+- **WebGL2 AA engine:** `TEXTURE_3D` ring buffer with time-history sampling, bilinear spatial filtering, temporal blending.
+- **IndexedDB roll:** Captures stored client-side; no photo library dependency means capture doesn't require live user gesture.
+- **Responsive capture:** Buffers use viewport aspect and device pixel density, capped to iOS canvas limits.
 
-`window.__slit2.burn(n, dt)` steps *n* frames of synthetic time, which is how
-every shape, gesture and capture path here gets tested without depending on
-`requestAnimationFrame` or a real camera.
+See [DESIGN.md](DESIGN.md) for design rationale and [docs/](docs/) for pre-implementation specs.
 
-See [DESIGN.md](DESIGN.md) for the design rationale, and
-[docs/](docs/) for the working specs written before each feature was built.
+## Limits
 
-## Status: prototype
-
-Honest about what this is:
-
-- **The on-device camera path is the least-tested part**, on both builds. The
-  geometry, the gestures, and every shape/anti-aliasing combination are
-  verified by stepping synthetic time; a real camera on real glass has not been
-  pointed at either build.
-- Stills only. No video export.
-- Settings do not persist between launches; the roll does, in IndexedDB, up to
-  40 captures or 250 MB, oldest evicted first.
-- One theme, deliberately dark. A camera that flips to white would wreck your
-  night vision and your judgement of the image.
-- Tested in the browsers available during development. Not audited across
-  devices.
+- **Stills only.** No video export.
+- **Settings don't persist** between sessions; the roll (IndexedDB) does — up to 40 captures or 250 MB, oldest evicted first.
+- **Dark theme only.** A white camera would destroy your night vision and image judgement.
+- **Real camera path is least-tested.** Geometry and gestures are verified via synthetic time-stepping; a live camera hasn't been extensively used yet.
 
 ## Files
 
 ```
-v2.html                 current app
-index.html              original prototype
-sw.js                   offline shell, shared by both builds
-manifest.webmanifest    home-screen install
-icon-*.png              generated, not drawn
-logo.svg                the SPLIIIT wordmark, inlined into v2.html
-mode-*.svg              the three mode drawings — masked in-app, so they
-                        take the UI's colour rather than their own
-blank-roll.svg          the roll's empty state
-tools/make-icons.mjs    regenerates the icons — node tools/make-icons.mjs
-examples/               stills from the app, used in this README
-docs/                   working specs, written before each feature was built
+index.html              the app (four modes, Warp, anti-aliasing, roll)
+legacy/index.html       v1 prototype (three modes, darkroom UI)
+v2.html                 redirect to index.html (backward compat)
+sw.js                   service worker (offline caching, v9)
+manifest.webmanifest    PWA install / home-screen config
+assets/                 icons, favicons, mode SVGs, blank-roll
+tools/make-icons.mjs    icon generation (node tools/make-icons.mjs)
+docs/                   pre-implementation specs
 ```
 
-## Credits
+## Author
 
-Concept, design and code by [Bruno Silva](https://ditongo.com) —
-[Ditongo](https://ditongo.com), a design studio in Lisbon — built together with
-Claude.
+[Bruno Silva](https://ditongo.com) — [Ditongo](https://ditongo.com) design studio, Lisbon.
 
 ## License
 
