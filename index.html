@@ -9,7 +9,9 @@
 <meta name="apple-mobile-web-app-title" content="Splitscan">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./assets/icon-180.png">
-<link rel="icon" href="./assets/icon-192.png">
+<link rel="icon" type="image/jpeg" sizes="32x32" href="./assets/favicon.jpg">
+<!-- apple-touch-icon stays the generated 180px art: that is the home-screen
+     icon, a different job from the 32px tab mark -->
 <title>Splitscan</title>
 <style>
 /* ── Material Design 3, dark, amber source ────────────────────────────
@@ -24,7 +26,9 @@
   --mint-dim:#5B715E;         /* unselected label, mint family */
   --chip:#4C4C4C;             /* toast ground; NOT the selected state */
   --sel:#5065D0;              /* selected fill — Figma Frame 1 */
-  --on-sel:#D7FCD6;           /* label on that fill — 4.57:1 */
+  --on-sel:var(--mint);       /* label on that fill — lime, 4.46:1. The
+                                 reference asked for #D7FCD6, a hair warmer;
+                                 lime keeps one green in the palette. */
   --label:rgba(199,233,199,.8); /* unselected label — Figma Frame 2/3 */
   --danger:#BB0404;
 
@@ -129,7 +133,10 @@ body.roll-open #hud{opacity:0}
              opacity .2s var(--ease);
   opacity:.45;                          /* stands down until a pass runs */
 }
-#segMode button[aria-pressed="true"]{background:var(--sel);color:var(--on-sel)}
+/* the active chip is never dimmed: at .45 over black #5065D0 renders as a
+   dull navy (~#242D5E), which is not the colour it is meant to be. Only the
+   unselected labels stand down, so what is armed stays legible at rest. */
+#segMode button[aria-pressed="true"]{background:var(--sel);color:var(--on-sel);opacity:1}
 body.scanning #segMode button{opacity:1}
 
 /* the mode drawings, as a legend in the sheet rather than in the bar
@@ -204,9 +211,6 @@ body.scanning #segMode button{opacity:1}
   top:calc(var(--bar-h) + var(--safe-b) + 96px);
   bottom:calc(var(--bar-h) + var(--safe-b) + 96px);
   pointer-events:none;opacity:0;transition:opacity .12s var(--ease);
-  /* the dial sits over the live image — a scrim keeps mint ticks readable
-     against a bright scene without boxing the dial in */
-  background:linear-gradient(to right, rgba(0,0,0,.45), rgba(0,0,0,0) 76px);
   /* full strength through the pill and the whole range, dissolving over the
      same 12% at BOTH ends so the scale runs off the screen symmetrically
      rather than being cut anywhere */
@@ -2425,7 +2429,7 @@ async function useFile(f){
 // see sw.js for why a bare './sw.js' can look unchanged for 10 minutes on
 // GitHub Pages even right after a real deploy.
 if ('serviceWorker' in navigator && window.isSecureContext){
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=8').catch(() => {}));
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js?v=9').catch(() => {}));
 }
 addEventListener('resize', () => {
   resize(); syncCapture();
