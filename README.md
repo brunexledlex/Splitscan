@@ -1,3 +1,5 @@
+![SPLIIIT — a slit-scan of a road at night, the guard rail combed into horizontal bands of time](assets/header.jpg)
+
 # SPLIIIT
 
 **A slit-scan browser camera for iPhone and web — four capture modes that reveal motion across time.**
