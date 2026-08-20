@@ -146,13 +146,17 @@ body.scanning #segMode button{opacity:1}
    they take the sheet's ink instead of their own flat black. */
 .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .modes figure{margin:0;text-align:center}
+.modes .tile{
+  display:flex;align-items:center;justify-content:center;
+  background:#fff;border-radius:18px;aspect-ratio:1;padding:16px;box-sizing:border-box;
+}
 .modes i{
-  display:block;width:100%;height:76px;
-  background:var(--black);
+  display:block;width:100%;height:100%;
+  background:var(--sel);
   -webkit-mask:var(--ico) no-repeat center/contain;
   mask:var(--ico) no-repeat center/contain;
 }
-.modes figcaption{font-size:13px;color:var(--on-surface-var);margin-top:6px}
+.modes figcaption{font-size:15px;font-weight:700;color:var(--black);margin-top:10px}
 
 /* Rate and Warp: floating pills over the image, right above the
    bar — the same look they had inside it, just no longer sharing its row. */
@@ -288,8 +292,9 @@ body.scanning #segMode button{opacity:1}
 .sheet.on{transform:translateY(0)}
 .grabber{width:32px;height:4px;border-radius:2px;background:var(--outline-var);
   margin:12px auto 4px}
-.sheet h2{font-size:18px;font-weight:600;margin:12px 0 2px}
+.sheet h2{font-size:28px;font-weight:800;margin:12px 0 6px}
 .sheet .hint{font-size:14px;color:var(--on-surface-var);margin:0 0 10px}
+.sheet .hint b{color:var(--black)}
 .group{margin:14px 0}
 /* a white card on the mint sheet: the one block here that is a note rather
    than a control, so it stops looking like a setting with no switch */
@@ -300,7 +305,7 @@ body.scanning #segMode button{opacity:1}
 /* the callout's heading is a byline, not one of the 11px section labels
    that caption the switches — scoped so those stay as they are */
 .group.callout > .label{
-  margin-bottom:10px;
+  margin-bottom:10px;text-transform:uppercase;
   font-size:17px;font-weight:700;letter-spacing:.02em;color:var(--black);
 }
 /* the callout is prose, not a control label — it gets read, so it is set
@@ -316,9 +321,16 @@ body.scanning #segMode button{opacity:1}
 }
 .callout-links svg{width:15px;height:15px;fill:currentColor;display:block;flex:0 0 auto}
 .group > .label{
-  font-size:13px;letter-spacing:.09em;text-transform:uppercase;
-  color:var(--on-surface-var);margin-bottom:8px;display:flex;gap:8px;align-items:baseline;
+  font-size:19px;font-weight:800;letter-spacing:0;text-transform:none;
+  color:var(--black);margin-bottom:8px;display:flex;gap:8px;align-items:baseline;
 }
+/* Slit Modes: a bordered box rather than a plain section, so the legend
+   reads as a distinct reference card instead of one setting among many */
+.group.boxed{
+  border:1.5px solid var(--black);border-radius:22px;
+  padding:16px 14px 18px;margin:18px 0;
+}
+.group.boxed > .label{margin-bottom:14px}
 .group > .label output{
   margin-left:auto;font-family:var(--mono);font-variant-numeric:tabular-nums;
   color:var(--primary);letter-spacing:0;text-transform:none;font-size:14px;
@@ -669,15 +681,16 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 <!-- settings: also the accessibility twin for every on-canvas gesture -->
 <div class="sheet" id="sheetTune" role="dialog" aria-modal="true" aria-label="Settings">
   <div class="grabber"></div>
-  <h2>Scan</h2>
-  <p class="hint">Drag anywhere on the image to aim the slit by hand.</p>
+  <h2>Hello!</h2>
+  <p class="hint"><b>Spliiit</b> is a PWA that allows you to capture slitscans
+    in various modes, from the traditional Strip mode to circular scans.</p>
 
-  <div class="group">
-    <div class="label"><span>Modes</span></div>
+  <div class="group boxed">
+    <div class="label"><span>Slit Modes</span></div>
     <div class="modes">
-      <figure><i style="--ico:url('./assets/mode-swipe.svg')"></i><figcaption>Swipe</figcaption></figure>
-      <figure><i style="--ico:url('./assets/mode-burst.svg')"></i><figcaption>Burst</figcaption></figure>
-      <figure><i style="--ico:url('./assets/mode-strip.svg')"></i><figcaption>Strip</figcaption></figure>
+      <figure><span class="tile"><i style="--ico:url('./assets/mode-burst.svg')"></i></span><figcaption>Tunnel</figcaption></figure>
+      <figure><span class="tile"><i style="--ico:url('./assets/mode-strip.svg')"></i></span><figcaption>Strip</figcaption></figure>
+      <figure><span class="tile"><i style="--ico:url('./assets/mode-swipe.svg')"></i></span><figcaption>Swipe</figcaption></figure>
     </div>
   </div>
 
@@ -696,9 +709,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <button data-aa="on">On</button>
     </div>
     <p class="hint" id="aaHint" style="margin:8px 0 0">
-      Re-renders the whole frame every tick from a rolling buffer of past
-      frames — a live, warped window into the last few seconds, not a
-      smoothing filter. Not available in Strip — it has no fixed time depth.
+      Experimental: live warped window into the last few seconds, not a
+      smoothing filter. Not available in Strip.
     </p>
   </div>
 
@@ -729,8 +741,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <button data-smooth="off">Off</button>
     </div>
     <p class="hint" style="margin:8px 0 0">
-      Feathers the edge of every slice as it's painted, so the seam between
-      one instant and the next blends instead of stepping. Works in every mode.
+      Seam between one instant and the next blends instead of stepping.
+      Works in every mode.
     </p>
   </div>
 
@@ -1648,8 +1660,8 @@ function aaSyncLabels(){
   $('oDepth').textContent = `${AA.depth} frames`;
   $('oQual').textContent = AA.qual === 180 ? 'Low' : AA.qual === 288 ? 'Medium' : 'High';
   $('oAAmem').textContent = AA.on
-    ? `${AA.hw}×${AA.hh} · ${(bytes/1048576).toFixed(0)} MB`
-    : `${(bytes/1048576).toFixed(0)} MB`;
+    ? `Buffer: ${AA.hw}×${AA.hh} · ${(bytes/1048576).toFixed(0)} MB`
+    : `Buffer: ${(bytes/1048576).toFixed(0)} MB`;
   $('oBlur').textContent = AA.blur.toFixed(2);
 }
 
