@@ -116,16 +116,18 @@ body.roll-open #hud{opacity:0}
    shares it evenly rather than sizing to its own label. */
 #segMode{
   display:flex;align-items:stretch;gap:6px;padding:3px;
+  opacity:.45;transition:opacity .2s var(--ease);
   background:var(--black);border-radius:80px;height:39px;width:100%;
 }
 #segMode button{
   flex:1 1 0;min-width:0;gap:7px;
-  font-size:14px;line-height:15px;color:var(--mint-dim);
+  font-size:14px;line-height:15px;color:var(--mint);
   padding:0 4px;border-radius:50px;
   display:flex;align-items:center;justify-content:center;
   transition:background .15s var(--ease),color .15s var(--ease);
 }
-#segMode button[aria-pressed="true"]{background:var(--sel);color:var(--black)}
+#segMode button[aria-pressed="true"]{background:var(--sel);color:var(--mint)}
+body.scanning #segMode{opacity:1}
 
 /* the mode drawings, as a legend in the sheet rather than in the bar
    itself: they are line art roughly 8 units wide in an 847-unit viewBox, so
@@ -1720,6 +1722,7 @@ function tick(now){
 /* ── state machine ────────────────────────────────────────────────── */
 function setState(next){
   state = next;
+  document.body.classList.toggle('scanning', next !== 'idle');
   const sh = $('shutter');
   closeSheets();                          // never leave a stale sheet over a live scan
   // the shutter's core is a CSS pseudo-element; injecting an icon here
