@@ -592,6 +592,52 @@ body.scanning #segMode button{opacity:1}
 .cpill.danger{background:var(--danger)}
 .cpill[hidden]{display:none !important}
 
+/* ── first-run splash (Figma Frame 12) ────────────────────────────────
+   Above everything — 7 was the ceiling — because while this is up nothing
+   behind it should be reachable. Its own overlay rather than #scrim,
+   which is wired to sheet dismissal: this one is a gate, and the only way
+   past it is the button. */
+#splash{
+  position:fixed;inset:0;z-index:8;
+  display:grid;place-items:center;padding:16px;
+  background:var(--scrim);
+  opacity:0;transition:opacity .24s var(--ease);
+}
+#splash.on{opacity:1}
+#splash.on .splash-card{transform:scale(1)}
+.splash-card{
+  width:267px;max-width:calc(100vw - 32px);
+  background:var(--mint);border-radius:30px;
+  padding:17px 27px;
+  display:flex;flex-direction:column;align-items:center;gap:9px;
+  transform:scale(.96);transition:transform .24s var(--ease);
+}
+.splash-mark{width:207px;color:var(--black)}
+.splash-mark svg{width:100%;height:auto;display:block}
+/* 223px wide in a 213px content box: the figure alone bleeds 5px into the
+   card's side padding, which is what the reference shows — the type and
+   the button stay on the 27px margin. */
+.splash-fig{
+  width:223px;height:97px;margin-inline:-5px;flex:none;
+  background:#fff;border-radius:16px;
+  display:grid;place-items:center;
+}
+.splash-fig img{width:207px;height:73px;display:block}
+.splash-desc{
+  align-self:stretch;margin:0;
+  font-size:13px;line-height:1.4;text-align:center;color:var(--chip);
+}
+/* bold goes to black, the same way .sheet .hint b already does */
+.splash-desc b{color:var(--black)}
+.splash-go{
+  align-self:stretch;height:46px;border-radius:48px;
+  background:var(--black);color:var(--mint);
+  font-size:14px;font-weight:700;line-height:17px;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .12s var(--ease);
+}
+.splash-go:active{transform:scale(.97)}
+
 /* export options: full targets, not list rows — tapping one exports it */
 .opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
 .opt{
@@ -847,6 +893,30 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 <!-- long-press a thumbnail: the real capture, uncropped, closes on finger up -->
 <div id="rollPreview" class="roll-preview" aria-hidden="true">
   <img id="rollPreviewImg" alt="">
+</div>
+
+<!-- First run only. carro.svg stays a FILE rather than inlined like the
+     wordmark: it is 43KB (20KB over the wire), which is a 40% bump to
+     every single page load for a graphic each person sees exactly once.
+     The box is fixed at 223x97 so a slow decode cannot shift the card. -->
+<div id="splash" role="dialog" aria-modal="true"
+     aria-labelledby="splashMark" aria-describedby="splashDesc" hidden>
+  <div class="splash-card">
+    <div class="splash-mark" id="splashMark" role="img" aria-label="SPLIIIT">
+      <svg viewBox="0 0 74.2 8.53" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M6.64,8.53c-.91,0-1.76-.05-2.56-.14s-1.5-.24-2.11-.45-1.09-.48-1.44-.82c-.35-.34-.52-.76-.52-1.25v-.11s0-.07.02-.1h3.63s0,.05-.01.09c0,.04-.01.07-.01.09,0,.26.12.46.35.62.23.16.56.27.98.34s.91.1,1.47.1c.31,0,.59,0,.86-.02.27-.02.5-.04.71-.08.21-.04.4-.09.56-.15.16-.06.28-.13.36-.22.08-.08.12-.18.12-.29,0-.18-.12-.34-.37-.46-.25-.12-.57-.22-.99-.3-.41-.08-.88-.16-1.4-.23-.52-.07-1.06-.15-1.62-.23s-1.1-.18-1.62-.3c-.52-.12-.98-.27-1.4-.46-.41-.18-.74-.41-.99-.69-.25-.28-.37-.61-.37-1,0-.43.16-.81.48-1.12.32-.32.77-.57,1.33-.77.57-.2,1.22-.35,1.96-.44.74-.09,1.53-.14,2.37-.14s1.6.05,2.32.14c.72.1,1.36.25,1.92.45.56.2,1,.46,1.31.77.32.31.48.68.49,1.11v.14h-3.61v-.08c0-.18-.09-.35-.26-.49-.18-.14-.44-.25-.79-.34-.35-.08-.78-.13-1.3-.13s-.96.03-1.31.08c-.36.06-.63.14-.82.24s-.28.23-.28.37c0,.18.12.32.37.43.24.11.58.21,1,.29.42.08.89.15,1.41.22.52.07,1.05.14,1.61.22.55.08,1.09.17,1.61.29.52.12.99.26,1.41.44.42.18.75.4,1,.67.24.26.37.58.37.96,0,.66-.27,1.18-.81,1.58s-1.28.69-2.23.88c-.94.18-2.01.28-3.2.28ZM14.57,8.39V.14h7.94c.98,0,1.82.11,2.51.34s1.23.54,1.6.95c.37.4.56.88.56,1.42s-.19,1.04-.58,1.45c-.39.41-.93.73-1.64.95s-1.55.34-2.53.34h-4.09v2.78h-3.76ZM18.32,3.95h3.21c.59,0,1.04-.09,1.34-.28.31-.19.46-.45.46-.79,0-.24-.07-.44-.2-.59-.13-.15-.33-.27-.6-.35-.27-.08-.6-.13-1.01-.13h-3.21v2.14ZM28.5,8.39V.14h3.76v6.48h7.33v1.76h-11.09ZM41.42,8.39V.14h3.76v8.24h-3.76ZM48.33,8.39V.14h3.76v8.24h-3.76ZM55.23,8.39V.14h3.76v8.24h-3.76ZM65.76,8.39V1.91h-4.68V.14h13.12v1.76h-4.68v6.48h-3.76Z" fill="currentColor"/>
+      </svg>
+    </div>
+    <div class="splash-fig">
+      <img src="./assets/carro.svg" width="207" height="73"
+           alt="A car drawn in horizontal bands, each band a different instant — a slit-scan.">
+    </div>
+    <p class="splash-desc" id="splashDesc">
+      Creative slit scan photography on the go.<br>
+      <b>Spliiit will ask your permission to use your phone’s camera.</b>
+    </p>
+    <button class="splash-go" id="splashGo">Continue</button>
+  </div>
 </div>
 
 <div id="snack" role="status" aria-live="polite"></div>
@@ -2575,6 +2645,18 @@ addEventListener('resize', () => {
 document.addEventListener('visibilitychange', () => { last = 0; });
 applyMode(); setState('idle'); aaSyncLabels(); syncCapture(); refreshRoll();
 
+/* Something has to be on screen while a permission prompt is pending, and
+   it is the same placeholder in both paths — behind the splash on a first
+   run, behind the OS prompt on every one after — so Continue never cuts
+   from black to image. Guarded on src.kind being untouched rather than
+   !== 'camera': on a first run this has already run once by the time
+   startCamera() calls it again, and a camera that has already won must
+   never be clobbered by the placeholder. */
+async function showPlaceholder(){
+  await placeholderReady;
+  if (!src.kind) useDemo();
+}
+
 /* Go straight for the camera — useCamera fires on the very first line,
    synchronously up to its own internal await, so the permission prompt
    appears as early as it possibly can. The placeholder image only covers
@@ -2583,14 +2665,13 @@ applyMode(); setState('idle'); aaSyncLabels(); syncCapture(); refreshRoll();
    already granted — src.kind is already 'camera' by the time we check, and
    the placeholder never shows at all. If the OS prompt is genuinely waiting
    on the person, the image is what's behind it in the meantime. */
-(async () => {
+async function startCamera(){
   const camPromise = useCamera('environment', true);
   camPromise.catch(() => {});   // mark handled now; awaited properly below —
                                 // otherwise the gap while placeholderReady
                                 // resolves is enough for a fast rejection
                                 // (camera blocked/denied) to log as unhandled
-  await placeholderReady;
-  if (src.kind !== 'camera') useDemo();
+  await showPlaceholder();
   try {
     await camPromise;
   } catch (e) {
@@ -2600,7 +2681,45 @@ applyMode(); setState('idle'); aaSyncLabels(); syncCapture(); refreshRoll();
     else if (!isSecureContext)
       snack('Camera needs https — showing the placeholder.', 5000);
   }
-})();
+}
+
+/* ── first run ────────────────────────────────────────────────────────
+   Firing the camera on the first line is right on every visit but the
+   first one, where a bare OS permission prompt arrives with nothing on
+   screen to explain what asked or why — the easiest possible thing to
+   deny, and on iOS a denial is sticky enough that the app is then broken
+   until someone digs through Safari's site settings. So the splash goes
+   first and Continue is what actually triggers the prompt.
+
+   Same localStorage guard as the milestones: private mode throws outright,
+   and a throw here has to mean "show the splash again", never "no camera".
+   getUserMedia already asks for audio:false, so the copy's promise that
+   this is camera-only is the literal constraint. */
+const SEEN_KEY = 'spliiit-seen';
+const seenSplash = () => { try{ return !!localStorage.getItem(SEEN_KEY); }
+                           catch(e){ return false; } };
+const markSeen   = () => { try{ localStorage.setItem(SEEN_KEY,'1'); } catch(e){} };
+
+function showSplash(){
+  const el = $('splash'), go = $('splashGo');
+  el.hidden = false;
+  requestAnimationFrame(() => el.classList.add('on'));
+  go.focus({preventScroll:true});
+  // one action, one focusable element: the overlay blocks the pointer but
+  // not Tab, so keep it here rather than let focus wander the app behind
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Tab'){ e.preventDefault(); go.focus(); }
+  });
+  go.addEventListener('click', () => {
+    markSeen();
+    el.classList.remove('on');
+    setTimeout(() => { el.hidden = true; }, 260);   // after the .24s fade
+    startCamera();                                  // the prompt, now in context
+  }, {once:true});
+}
+
+if (seenSplash()) startCamera();
+else { showPlaceholder(); showSplash(); }
 requestAnimationFrame(tick);
 
 window.__slit2 = {

@@ -13,7 +13,7 @@
    "whatever's-in-the-HTTP-cache-for-10-minutes-first". `{cache:'no-store'}`
    is what actually forces a live request. See registration in v2.html/
    index.html for the matching fix on the sw.js file itself. */
-const CACHE = 'slitscan-v9';
+const CACHE = 'slitscan-v10';
 const ASSETS = [
   './',
   './index.html',
@@ -23,6 +23,7 @@ const ASSETS = [
   './assets/icon-180.png',
   './assets/favicon.jpg',
   './assets/placeholder.jpg',
+  './assets/carro.svg',
   './assets/logo.svg',
   './assets/mode-swipe.svg',
   './assets/mode-burst.svg',

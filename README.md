@@ -19,6 +19,8 @@ A slit-scan photographs a thin *slice* of the frame, over and over. One axis of 
 
 ## Using it
 
+**First run** · A splash card explains what the app is and warns that the camera prompt is coming; **Continue** is what triggers it. Camera only — the app never asks for the microphone. Shown once per browser.
+
 **Swipe the screen** to aim the slit — up/down/left/right for Swipe, up/down to expand/contract Burst.
 
 **Slice thickness** · Press the mint pill on the left edge and drag up: 1–60 pixels. Tap to reset to 1px.
@@ -27,7 +29,7 @@ A slit-scan photographs a thin *slice* of the frame, over and over. One axis of 
 
 **Roll** · Top bar, left of Settings. Thumbnails of your session. Deselect unwanted captures, tap **Close**, and **Save** to export the rest.
 
-**Capture size** · Settings → Experimental. Screen (native resolution), Panorama (4000px), or Infinite (8000px cap). All show live pixel dimensions.
+**Capture size** · Settings → Experimental. Screen (viewport aspect at native resolution), Panorama (3000 × 1688, true 16:9 landscape however you hold the phone), or Infinite (3000px wide, screen height). All show live pixel dimensions. The viewfinder stays full-bleed in every mode — the wider buffers are cropped to the screen for framing, never letterboxed, and the export is always the whole buffer.
 
 **Anti-aliasing** (Experimental) · WebGL time-displacement engine. Keeps a rolling history of frames and sub-pixel/sub-frame interpolates them, removing stair-stepping at fast motion edges. GPU memory is shown live and capped to iPhone limits.
 
@@ -58,7 +60,7 @@ See [DESIGN.md](DESIGN.md) for design rationale and [docs/](docs/) for pre-imple
 ## Limits
 
 - **Stills only.** No video export.
-- **Settings don't persist** between sessions; the roll (IndexedDB) does — up to 40 captures or 250 MB, oldest evicted first.
+- **Settings don't persist** between sessions. The roll (IndexedDB) does — up to 40 captures or 250 MB, oldest evicted first — as do the lifetime capture count and the first-run flag (localStorage). Clearing site data brings the splash back.
 - **Dark theme only.** A white camera would destroy your night vision and image judgement.
 - **Real camera path is least-tested.** Geometry and gestures are verified via synthetic time-stepping; a live camera hasn't been extensively used yet.
 
@@ -68,7 +70,7 @@ See [DESIGN.md](DESIGN.md) for design rationale and [docs/](docs/) for pre-imple
 index.html              the app (four modes, Warp, anti-aliasing, roll)
 legacy/index.html       v1 prototype (three modes, darkroom UI)
 v2.html                 redirect to index.html (backward compat)
-sw.js                   service worker (offline caching, v9)
+sw.js                   service worker (offline caching, v10)
 manifest.webmanifest    PWA install / home-screen config
 assets/                 icons, favicons, mode SVGs, blank-roll
 tools/make-icons.mjs    icon generation (node tools/make-icons.mjs)
