@@ -764,6 +764,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
       <div class="seg" id="segCapture" role="group" aria-label="Capture size">
         <button data-capture="screen" aria-pressed="true">Screen</button>
         <button data-capture="x2">2\u00D7</button>
+        <button data-capture="pano">Panorama</button>
+        <button data-capture="infinite">Infinite</button>
       </div>
     </div>
 
@@ -910,6 +912,8 @@ const CAPTURE_MULT = { screen:1, x2:2 };
 const MAX_LONG = 4096, MAX_AREA = 8e6;     // iOS canvas headroom
 
 function captureLong(vw, vh){
+  if (S.capture === 'pano') return 4000;
+  if (S.capture === 'infinite') return 8000;
   const dpr = Math.min(devicePixelRatio || 1, 3);
   const mult = CAPTURE_MULT[S.capture] || 1;
   return clamp(Math.round(Math.max(vw,vh) * dpr * mult), 1280, MAX_LONG);
