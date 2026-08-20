@@ -116,7 +116,6 @@ body.roll-open #hud{opacity:0}
    shares it evenly rather than sizing to its own label. */
 #segMode{
   display:flex;align-items:stretch;gap:6px;padding:3px;
-  opacity:.45;transition:opacity .2s var(--ease);
   background:var(--black);border-radius:80px;height:39px;width:100%;
 }
 #segMode button{
@@ -124,10 +123,12 @@ body.roll-open #hud{opacity:0}
   font-size:14px;line-height:15px;color:var(--mint);
   padding:0 4px;border-radius:50px;
   display:flex;align-items:center;justify-content:center;
-  transition:background .15s var(--ease),color .15s var(--ease);
+  transition:background .15s var(--ease),color .15s var(--ease),
+             opacity .2s var(--ease);
+  opacity:.45;                          /* stands down until a pass runs */
 }
-#segMode button[aria-pressed="true"]{background:var(--sel);color:var(--mint)}
-body.scanning #segMode{opacity:1}
+#segMode button[aria-pressed="true"]{background:var(--sel);color:var(--black)}
+body.scanning #segMode button{opacity:1}
 
 /* the mode drawings, as a legend in the sheet rather than in the bar
    itself: they are line art roughly 8 units wide in an 847-unit viewBox, so
