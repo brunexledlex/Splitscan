@@ -76,7 +76,17 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 
 /* ── viewport: the product. Full bleed, nothing letterboxed ───────── */
 #viewport{position:fixed;inset:0;touch-action:none;background:#000}
-#viewport canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+/* Panorama and Infinite give the accumulation buffer (W×H) an aspect that
+   no longer matches the phone screen's own aspect — a landscape 16:9
+   buffer inside a portrait box, say. object-fit:cover is what keeps the
+   screen full-bleed anyway: the browser scales the bitmap up until it
+   fills the box and crops the overflow, the same way a video element
+   covers its container. Without it a mismatched buffer would either
+   distort (the default, non-uniform stretch) or, with `contain`, letterbox
+   — exactly the bars this rule exists to rule out. toCanvas() has the
+   matching un-crop math, since a tap now lands on a cropped subset of the
+   buffer, not the whole thing 1:1. */
+#viewport canvas{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover}
 #hud{pointer-events:none;transition:opacity .16s var(--ease)}
 /* the slit line and its bezel are a live readout of where the scan is
    reading — with the roll open nothing is being scanned and it only sweeps
@@ -947,21 +957,46 @@ const placeholderImg = new Image();
 placeholderImg.src = './assets/placeholder.jpg';
 const placeholderReady = placeholderImg.decode().catch(() => {});
 
-/* ── sizing: accumulate at the VIEWPORT's aspect ──────────────────────
-   Full-bleed with no display crop — what you see is exactly the buffer.
-   Only the HD export crops, and the HUD shows that crop.              */
-/* Capture size follows the DEVICE, not a fixed 1920x1080. The old export
-   forced 16:9 landscape out of a portrait buffer and centre-cropped it,
-   throwing away ~74% of the picture. Nothing needed that. */
-const CAPTURE_MULT = { screen:1, x2:2 };
-const MAX_LONG = 4096, MAX_AREA = 8e6;     // iOS canvas headroom
+/* ── sizing: three independent buffer shapes ──────────────────────────
+   Screen still accumulates at the viewport's own aspect, full-bleed with
+   no display crop, same as always. Panorama and Infinite now have a
+   FIXED shape of their own rather than just a bigger version of whatever
+   the phone's aspect happens to be — otherwise "16:9 panorama" on a
+   portrait phone rendered as a tall portrait image, and "Infinite" was
+   just a slightly bigger portrait rectangle, neither of which is what
+   either name promises. object-fit:cover on #viewport canvas (and the
+   matching un-crop in toCanvas()) is what keeps the screen full-bleed
+   with no bars once the buffer stops matching the phone's own aspect. */
+const MAX_LONG = 4096, MAX_AREA = 8e6;     // 'screen' ceiling, unchanged
+/* Long-edge ceiling for Panorama/Infinite, not 'screen'. Grounded, not
+   guessed: WebKit's iOS canvas cap only reached 8192px in iOS 18 (was
+   4096px for the ~10 years before); Chrome on Android GPU-rasters
+   accelerated canvases through a legacy ~4096px-per-side driver
+   workaround despite Blink's own much larger nominal limit. Real tab-kill
+   thresholds aren't fixed numbers on either OS, but reports of memory
+   pressure at a single large canvas plus a live camera feed start well
+   under 2GB. 3000px clears every one of those ceilings on both platforms
+   with real margin, rather than riding the newest/most permissive one. */
+const SAFE_LONG_EDGE = 3000;
+const PANO_ASPECT = 16/9;                  // landscape, regardless of how the phone is held
 
-function captureLong(vw, vh){
-  if (S.capture === 'pano') return 4000;
-  if (S.capture === 'infinite') return 8000;
+function targetSize(vw, vh){
   const dpr = Math.min(devicePixelRatio || 1, 3);
-  const mult = CAPTURE_MULT[S.capture] || 1;
-  return clamp(Math.round(Math.max(vw,vh) * dpr * mult), 1280, MAX_LONG);
+  if (S.capture === 'pano'){
+    const w = SAFE_LONG_EDGE, h = Math.round(w / PANO_ASPECT);
+    return { w, h };
+  }
+  if (S.capture === 'infinite'){
+    // height stays at the device's own resolution — this is Screen's
+    // height widened out, not a different frame — only width is pushed
+    // to the safe ceiling, which is the one axis "as wide as it safely
+    // can be" is actually about.
+    const h = Math.round(Math.min(vw,vh) * dpr);
+    return { w: SAFE_LONG_EDGE, h: Math.min(h, SAFE_LONG_EDGE) };
+  }
+  const long = clamp(Math.round(Math.max(vw,vh) * dpr), 1280, MAX_LONG);
+  const s = long / Math.max(vw, vh);
+  return { w: Math.round(vw*s), h: Math.round(vh*s) };
 }
 
 function resize(){
@@ -970,8 +1005,7 @@ function resize(){
   const vw = innerWidth || document.documentElement.clientWidth || 0;
   const vh = innerHeight || document.documentElement.clientHeight || 0;
   if (vw < 2 || vh < 2) return;
-  const s = captureLong(vw, vh) / Math.max(vw, vh);
-  let nw = Math.round(vw*s), nh = Math.round(vh*s);
+  let { w:nw, h:nh } = targetSize(vw, vh);
   if (nw*nh > MAX_AREA){                    // stay inside the area ceiling
     const k = Math.sqrt(MAX_AREA/(nw*nh));
     nw = Math.round(nw*k); nh = Math.round(nh*k);
@@ -2243,9 +2277,21 @@ function applyMode(){
 const vp = $('viewport');
 let dragging = null;
 
+/* Inverse of object-fit:cover. When the buffer's aspect matches the box's
+   (still true for Screen) this reduces to the old plain proportional
+   formula. When it doesn't (Panorama, Infinite) the box only ever shows a
+   centred crop of the buffer, so a tap has to land in THAT window, not be
+   stretched across the whole W×H as if no cropping were happening — the
+   old formula, unchanged, would put every tap off by the crop each axis. */
 function toCanvas(ev){
   const r = acc.getBoundingClientRect();
-  return { x:(ev.clientX-r.left)/r.width*W, y:(ev.clientY-r.top)/r.height*H };
+  const scale = Math.max(r.width/W, r.height/H);
+  const visW = r.width/scale, visH = r.height/scale;      // buffer px on screen
+  const offX = (W-visW)/2, offY = (H-visH)/2;              // centred crop, object-position: 50% 50%
+  return {
+    x: offX + (ev.clientX-r.left)/r.width*visW,
+    y: offY + (ev.clientY-r.top)/r.height*visH,
+  };
 }
 /* Swipe picks the slit, per shape. Aiming by hand is gone.
      Swipe  drag the way the slit TRAVELS -> it enters from behind you
