@@ -703,38 +703,6 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   </div>
 
   <div class="group">
-    <div class="label"><span>Warp</span><output id="oAAmem"></output></div>
-    <div class="seg" id="segAA" role="group" aria-label="Warp">
-      <button data-aa="off" aria-pressed="true">Off</button>
-      <button data-aa="on">On</button>
-    </div>
-    <p class="hint" id="aaHint" style="margin:8px 0 0">
-      Experimental: live warped window into the last few seconds, not a
-      smoothing filter. Not available in Strip.
-    </p>
-  </div>
-
-  <div id="aaControls" hidden>
-    <div class="group">
-      <div class="label"><span>Time depth</span><output id="oDepth">120 frames</output></div>
-      <input type="range" id="sDepth" min="30" max="600" step="10" value="120" aria-label="Time depth in frames">
-    </div>
-    <div class="group">
-      <div class="label"><span>Buffer quality</span><output id="oQual">Medium</output></div>
-      <div class="seg" id="segQual" role="group" aria-label="Buffer quality">
-        <button data-qual="180">Low</button>
-        <button data-qual="288" aria-pressed="true">Medium</button>
-        <button data-qual="432">High</button>
-      </div>
-    </div>
-    <div class="group">
-      <div class="label"><span>Temporal blur</span><output id="oBlur">0.00</output></div>
-      <input type="range" id="sBlur" min="0" max="1" step="0.02" value="0" aria-label="Temporal blur window">
-    </div>
-  </div>
-
-
-  <div class="group">
     <div class="label"><span>Smoothing</span></div>
     <div class="seg" id="segSmooth" role="group" aria-label="Smoothing">
       <button data-smooth="on" aria-pressed="true">On</button>
@@ -750,6 +718,37 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     style="width:100%;justify-content:center">Experimental</button>
 
   <div id="advanced" hidden>
+    <div class="group">
+      <div class="label"><span>Warp</span><output id="oAAmem"></output></div>
+      <div class="seg" id="segAA" role="group" aria-label="Warp">
+        <button data-aa="off" aria-pressed="true">Off</button>
+        <button data-aa="on">On</button>
+      </div>
+      <p class="hint" id="aaHint" style="margin:8px 0 0">
+        Live warped window into the last few seconds, not a
+        smoothing filter. Not available in Strip.
+      </p>
+    </div>
+
+    <div id="aaControls" hidden>
+      <div class="group">
+        <div class="label"><span>Time depth</span><output id="oDepth">120 frames</output></div>
+        <input type="range" id="sDepth" min="30" max="600" step="10" value="120" aria-label="Time depth in frames">
+      </div>
+      <div class="group">
+        <div class="label"><span>Buffer quality</span><output id="oQual">Medium</output></div>
+        <div class="seg" id="segQual" role="group" aria-label="Buffer quality">
+          <button data-qual="180">Low</button>
+          <button data-qual="288" aria-pressed="true">Medium</button>
+          <button data-qual="432">High</button>
+        </div>
+      </div>
+      <div class="group">
+        <div class="label"><span>Temporal blur</span><output id="oBlur">0.00</output></div>
+        <input type="range" id="sBlur" min="0" max="1" step="0.02" value="0" aria-label="Temporal blur window">
+      </div>
+    </div>
+
     <div class="group">
       <div class="label"><span>Slice — full range</span><output id="oSliceFine">2</output></div>
       <input type="range" id="sSlice" min="1" max="30" step="1" value="2" aria-label="Slice thickness fine">
