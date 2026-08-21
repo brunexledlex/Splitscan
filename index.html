@@ -704,6 +704,9 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 <body>
 
 <div id="viewport">
+  <!-- under #acc on purpose: the dimmed live feed shows through wherever
+       the picture has not been scanned yet. Display only — never exported. -->
+  <canvas id="guide"></canvas>
   <canvas id="acc"></canvas>
   <canvas id="gl" hidden></canvas>
   <canvas id="hud"></canvas>
@@ -976,6 +979,7 @@ $('rollX').innerHTML = svg('close');    // dismiss the roll, no side effects
 /* ── canvases ─────────────────────────────────────────────────────── */
 const acc = $('acc'), hud = $('hud'), video = $('vid');
 const ax = acc.getContext('2d'), hx = hud.getContext('2d');
+const guide = $('guide'), gx = guide.getContext('2d');
 
 let W = 0, H = 0;                      // accumulation size (viewport aspect)
 let state = 'idle';                    // idle | scanning | export
@@ -1087,7 +1091,11 @@ function resize(){
 }
 function clearAcc(){
   ax.setTransform(1,0,0,1,0,0);
-  ax.fillStyle = '#000'; ax.fillRect(0,0,W,H);
+  // TRANSPARENT, not black: the framing guide sits under this canvas and has
+  // to show through wherever the pass has not painted yet. Export is
+  // unaffected — exportCanvas() lays its own black ground down first, so an
+  // unpainted pixel still comes out black in the picture.
+  ax.clearRect(0,0,W,H);
   const L = sweepLength();
   sweepS = sweepPrev = sweepPaint = S.reverse ?  L/2 : -L/2;
   ringR  = ringPrev  = ringPaint  = S.reverse ? maxRadius() : 0;
@@ -1106,6 +1114,55 @@ function drawSource(ctx){
     ctx.drawImage(src.el, ox, oy, dw, dh); ctx.restore();
   } else ctx.drawImage(src.el, ox, oy, dw, dh);
 }
+
+/* ── framing guide ────────────────────────────────────────────────────
+   Mid-pass, the accumulation buffer only holds what the slit has already
+   read; everything ahead of it is empty. That empty region used to be
+   opaque black, which meant that for most of an exposure you were aiming a
+   camera at a black rectangle and could not see what you were about to
+   scan. The guide is the live feed, dimmed, sitting UNDER acc: it shows
+   through the unpainted region and is covered over as the scan fills in.
+   Works the same in all three geometries because it is not tied to any of
+   them — it just fills whatever acc has not claimed yet.
+
+   Display only. It is a separate canvas and never touches acc, which is
+   what exportCanvas() reads, so nothing dimmed can reach the picture.
+
+   Deliberately low resolution: a dim backdrop nobody inspects closely does
+   not need a 3000x1688 drawImage every frame on a phone. The ASPECT
+   matches acc, so the object-fit:cover crop lands identically on both and
+   the two stay in register. */
+const GUIDE_ALPHA = 0.25;   // enough to frame and follow motion by, and no
+                            // more — the exposure is the thing being looked at
+const GUIDE_LONG  = 720;    // long edge in px; aspect follows acc
+
+function ensureGuide(){
+  const k = Math.min(1, GUIDE_LONG / Math.max(W, H));
+  const gw = Math.max(2, Math.round(W * k)), gh = Math.max(2, Math.round(H * k));
+  if (guide.width !== gw || guide.height !== gh){ guide.width = gw; guide.height = gh; }
+}
+
+function drawGuide(){
+  ensureGuide();
+  const gw = guide.width, gh = guide.height;
+  gx.setTransform(1,0,0,1,0,0);
+  gx.clearRect(0,0,gw,gh);
+  if (!src.el || !src.w) return;
+  // same cover fit as drawSource, resolved against the guide's own size
+  const s = Math.max(gw/src.w, gh/src.h);
+  const dw = src.w*s, dh = src.h*s, ox = (gw-dw)/2, oy = (gh-dh)/2;
+  gx.save();
+  gx.globalAlpha = GUIDE_ALPHA;
+  if (src.mirror){ gx.translate(gw,0); gx.scale(-1,1); }
+  gx.drawImage(src.el, ox, oy, dw, dh);
+  gx.restore();
+}
+
+function clearGuide(){
+  gx.setTransform(1,0,0,1,0,0);
+  gx.clearRect(0,0,guide.width,guide.height);
+}
+let guideOn = false;    // so idle clears the guide once, not 60 times a second
 
 /* ── geometry: one time field, three shapes ───────────────────────────
    Every slit here is the contour where the same scalar field equals "now".
@@ -1297,7 +1354,31 @@ function paintRing(a, b, alpha = 1){
   const F = featherPx();
   const atPivot = dir() > 0 && r0 <= F;
   if (!S.smooth || F < 1 || atPivot){
-    ax.save(); ax.globalAlpha = alpha; ring(ax, r0, r1); ax.clip();
+    /* Rings that merely ABUT leave a seam, and it is arithmetic, not a
+       rounding slip. A ring boundary is a circle, so it almost never lands
+       on a pixel edge: the pixel it crosses gets coverage α from this ring
+       and 1-α from its neighbour. Those composite source-over as
+       α + (1-α) - α(1-α) = 1 - α(1-α), which is short of opaque for every
+       α strictly between 0 and 1 — worst at α=.5, where it is exactly .75.
+       That is the measured value: every seam pixel came back 191, and
+       255 x .75 = 191. Black ground showing through by a quarter.
+
+       So the ring is grown one pixel along its TRAILING edge — the side
+       already painted — and overpaints its predecessor's boundary instead
+       of butting against it. One pixel is the smallest guaranteed fix:
+       coverage short by α needs ε >= α, and α approaches 1. The feathered
+       branch below has always done this (by F, for a different reason),
+       which is why slice >= 9 with Smoothing on was the one configuration
+       that measured clean.
+
+       Only the clip moves. painted() still advances by exactly one slice,
+       so pass duration, progress and the slice accounting are untouched;
+       the overlap costs a sub-pixel shift in which instant one pixel ring
+       samples, against a seam that was plainly visible. */
+    const SEAM = 1;
+    const c0 = dir() > 0 ? Math.max(r0 - SEAM, 0) : r0;
+    const c1 = dir() > 0 ? r1 : r1 + SEAM;
+    ax.save(); ax.globalAlpha = alpha; ring(ax, c0, c1); ax.clip();
     drawSource(ax); ax.restore();
     return;
   }
@@ -1419,7 +1500,7 @@ function stepStrip(dt){
    content appears to scroll left — exactly a strip camera's viewfinder */
 function presentStrip(){
   ax.setTransform(1,0,0,1,0,0);
-  ax.fillStyle = '#000'; ax.fillRect(0,0,W,H);
+  ax.clearRect(0,0,W,H);          // transparent, so the guide shows through
   if (!stripCv || !stripX) return;
   const winW = Math.min(stripX, W);
   const from = Math.max(0, stripX - winW);
@@ -1863,6 +1944,11 @@ function frame(dt){
     }
     stepFor(dt);
   }
+
+  // only while a pass is running: at rest acc is fully painted every frame
+  // and covers this anyway, so idle stays exactly as it was
+  if (state === 'scanning'){ drawGuide(); guideOn = true; }
+  else if (guideOn){ clearGuide(); guideOn = false; }
 
   drawHud();
 
