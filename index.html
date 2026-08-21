@@ -1136,13 +1136,73 @@ const GUIDE_ALPHA = 0.25;   // enough to frame and follow motion by, and no
                             // more — the exposure is the thing being looked at
 const GUIDE_LONG  = 720;    // long edge in px; aspect follows acc
 
+/* The guide also carries the running indicator: a mint-to-blue gradient
+   rolling slowly across it. Putting it HERE rather than on a bezel or a
+   badge is the whole point — the guide only shows where the pass has not
+   painted yet, so the colour is literally the area still to be captured,
+   and it retreats as the exposure fills in. Nothing to read: what is
+   moving is what is left.
+
+   source-atop, not source-over: the guide already carries alpha .25
+   everywhere the feed covers, and source-atop tints INSIDE that alpha
+   instead of stacking on top of it. Painting the gradient normally would
+   have added its own opacity and quietly made the guide heavier than the
+   .25 it is supposed to be.
+
+   Two periods across the diagonal, not one. At one period a single row of
+   the frame spanned only about a third of a cycle, so a tall phone showed
+   one slow colour wash instead of bands travelling — measurably: a
+   mid-row sampled all-blue at some phases. Halving the period puts more
+   than a full cycle down the height and about two thirds across the
+   width, which is what actually reads as rolling.
+
+   The stops also dwell briefly on each colour rather than ramping
+   straight from one to the other. A pure two-stop ramp spends most of its
+   length near the midpoint of mint and blue, which is a muddy grey-teal
+   that looks like neither — so mint and blue each get a short plateau at
+   their peak and the ramp happens between them.
+
+   The gradient is built three periods long, so shifting it by exactly one
+   period is a no-op: the roll loops seamlessly with no jump to hide.
+   Held still (but still tinted) under prefers-reduced-motion — the two
+   colours still say "running"; the movement is the part some people
+   cannot have. */
+/* GUIDE_TINT is a share of GUIDE_ALPHA, not of the screen: at .25 guide
+   opacity a .45 tint only puts ~11% colour over black, which is faint on a
+   phone in daylight. .55 lands nearer 14% and actually reads, without
+   touching the .25 that keeps the viewfinder comfortable. */
+const GUIDE_TINT = 0.55;    // how much colour over the feed; framing survives
+const GUIDE_ROLL = 0.30;    // cycles per second — deliberately slow
+const TINT_CYCLES = 2;      // periods across the diagonal
+const TINT_HOLD = 0.035;    // plateau half-width, in gradient length
+const TINT_A = '#CEFDD3';   // --mint
+const TINT_B = '#5065D0';   // --sel
+const stillTint = matchMedia('(prefers-reduced-motion: reduce)');
+let guidePhase = 0;
+
 function ensureGuide(){
   const k = Math.min(1, GUIDE_LONG / Math.max(W, H));
   const gw = Math.max(2, Math.round(W * k)), gh = Math.max(2, Math.round(H * k));
   if (guide.width !== gw || guide.height !== gh){ guide.width = gw; guide.height = gh; }
 }
 
-function drawGuide(){
+function rollingTint(gw, gh){
+  const P = Math.hypot(gw, gh) / TINT_CYCLES;   // one mint->blue->mint cycle
+  const u = Math.SQRT1_2;                       // 45deg, so it reads as motion
+  const shift = (guidePhase % 1) * P;           // in either orientation
+  const sx = -P + u*shift, sy = -P + u*shift;
+  const g = gx.createLinearGradient(sx, sy, sx + u*3*P, sy + u*3*P);
+  // 3 periods => a colour peak every 1/6, each held briefly so it reads as
+  // mint and blue rather than as the grey-teal halfway between them
+  for (let i = 0; i <= 6; i++){
+    const c = i % 2 ? TINT_B : TINT_A, at = i/6;
+    g.addColorStop(Math.max(0, at - TINT_HOLD), c);
+    g.addColorStop(Math.min(1, at + TINT_HOLD), c);
+  }
+  return g;
+}
+
+function drawGuide(dt){
   ensureGuide();
   const gw = guide.width, gh = guide.height;
   gx.setTransform(1,0,0,1,0,0);
@@ -1155,6 +1215,14 @@ function drawGuide(){
   gx.globalAlpha = GUIDE_ALPHA;
   if (src.mirror){ gx.translate(gw,0); gx.scale(-1,1); }
   gx.drawImage(src.el, ox, oy, dw, dh);
+  gx.restore();
+
+  if (!stillTint.matches) guidePhase += (dt || 0) * GUIDE_ROLL;
+  gx.save();
+  gx.globalCompositeOperation = 'source-atop';
+  gx.globalAlpha = GUIDE_TINT;
+  gx.fillStyle = rollingTint(gw, gh);
+  gx.fillRect(0,0,gw,gh);
   gx.restore();
 }
 
@@ -1947,8 +2015,8 @@ function frame(dt){
 
   // only while a pass is running: at rest acc is fully painted every frame
   // and covers this anyway, so idle stays exactly as it was
-  if (state === 'scanning'){ drawGuide(); guideOn = true; }
-  else if (guideOn){ clearGuide(); guideOn = false; }
+  if (state === 'scanning'){ drawGuide(dt); guideOn = true; }
+  else if (guideOn){ clearGuide(); guideOn = false; guidePhase = 0; }
 
   drawHud();
 
