@@ -1136,73 +1136,18 @@ const GUIDE_ALPHA = 0.25;   // enough to frame and follow motion by, and no
                             // more — the exposure is the thing being looked at
 const GUIDE_LONG  = 720;    // long edge in px; aspect follows acc
 
-/* The guide also carries the running indicator: a mint-to-blue gradient
-   rolling slowly across it. Putting it HERE rather than on a bezel or a
-   badge is the whole point — the guide only shows where the pass has not
-   painted yet, so the colour is literally the area still to be captured,
-   and it retreats as the exposure fills in. Nothing to read: what is
-   moving is what is left.
-
-   source-atop, not source-over: the guide already carries alpha .25
-   everywhere the feed covers, and source-atop tints INSIDE that alpha
-   instead of stacking on top of it. Painting the gradient normally would
-   have added its own opacity and quietly made the guide heavier than the
-   .25 it is supposed to be.
-
-   Two periods across the diagonal, not one. At one period a single row of
-   the frame spanned only about a third of a cycle, so a tall phone showed
-   one slow colour wash instead of bands travelling — measurably: a
-   mid-row sampled all-blue at some phases. Halving the period puts more
-   than a full cycle down the height and about two thirds across the
-   width, which is what actually reads as rolling.
-
-   The stops also dwell briefly on each colour rather than ramping
-   straight from one to the other. A pure two-stop ramp spends most of its
-   length near the midpoint of mint and blue, which is a muddy grey-teal
-   that looks like neither — so mint and blue each get a short plateau at
-   their peak and the ramp happens between them.
-
-   The gradient is built three periods long, so shifting it by exactly one
-   period is a no-op: the roll loops seamlessly with no jump to hide.
-   Held still (but still tinted) under prefers-reduced-motion — the two
-   colours still say "running"; the movement is the part some people
-   cannot have. */
-/* GUIDE_TINT is a share of GUIDE_ALPHA, not of the screen: at .25 guide
-   opacity a .45 tint only puts ~11% colour over black, which is faint on a
-   phone in daylight. .55 lands nearer 14% and actually reads, without
-   touching the .25 that keeps the viewfinder comfortable. */
-const GUIDE_TINT = 0.55;    // how much colour over the feed; framing survives
-const GUIDE_ROLL = 0.30;    // cycles per second — deliberately slow
-const TINT_CYCLES = 2;      // periods across the diagonal
-const TINT_HOLD = 0.035;    // plateau half-width, in gradient length
-const TINT_A = '#CEFDD3';   // --mint
-const TINT_B = '#5065D0';   // --sel
-const stillTint = matchMedia('(prefers-reduced-motion: reduce)');
-let guidePhase = 0;
-
+/* The guide stays what it is: the dimmed live feed, and nothing else. A
+   rolling tint across the whole of it competed with the framing it exists
+   to provide — the running indicator lives on the slit line instead, in
+   drawSlit(), where the two colours mark the one thing that is actually
+   moving. */
 function ensureGuide(){
   const k = Math.min(1, GUIDE_LONG / Math.max(W, H));
   const gw = Math.max(2, Math.round(W * k)), gh = Math.max(2, Math.round(H * k));
   if (guide.width !== gw || guide.height !== gh){ guide.width = gw; guide.height = gh; }
 }
 
-function rollingTint(gw, gh){
-  const P = Math.hypot(gw, gh) / TINT_CYCLES;   // one mint->blue->mint cycle
-  const u = Math.SQRT1_2;                       // 45deg, so it reads as motion
-  const shift = (guidePhase % 1) * P;           // in either orientation
-  const sx = -P + u*shift, sy = -P + u*shift;
-  const g = gx.createLinearGradient(sx, sy, sx + u*3*P, sy + u*3*P);
-  // 3 periods => a colour peak every 1/6, each held briefly so it reads as
-  // mint and blue rather than as the grey-teal halfway between them
-  for (let i = 0; i <= 6; i++){
-    const c = i % 2 ? TINT_B : TINT_A, at = i/6;
-    g.addColorStop(Math.max(0, at - TINT_HOLD), c);
-    g.addColorStop(Math.min(1, at + TINT_HOLD), c);
-  }
-  return g;
-}
-
-function drawGuide(dt){
+function drawGuide(){
   ensureGuide();
   const gw = guide.width, gh = guide.height;
   gx.setTransform(1,0,0,1,0,0);
@@ -1215,14 +1160,6 @@ function drawGuide(dt){
   gx.globalAlpha = GUIDE_ALPHA;
   if (src.mirror){ gx.translate(gw,0); gx.scale(-1,1); }
   gx.drawImage(src.el, ox, oy, dw, dh);
-  gx.restore();
-
-  if (!stillTint.matches) guidePhase += (dt || 0) * GUIDE_ROLL;
-  gx.save();
-  gx.globalCompositeOperation = 'source-atop';
-  gx.globalAlpha = GUIDE_TINT;
-  gx.fillStyle = rollingTint(gw, gh);
-  gx.fillRect(0,0,gw,gh);
   gx.restore();
 }
 
@@ -1577,6 +1514,84 @@ function presentStrip(){
 
 const MINT = '206,253,211';
 
+/* ── the running indicator, on the slit itself ────────────────────────
+   Mint to blue and back, travelling ALONG the slit while a pass runs. The
+   slit is the one thing on screen that is genuinely moving, so it is the
+   honest place to say so — and it costs no picture area, which a tint over
+   the whole frame did: that fought the framing guide underneath it for the
+   same pixels.
+
+   The roll follows each geometry rather than being imposed on it. Straight
+   slits (Swipe, Field, Strip) get a linear gradient down their own length;
+   Burst gets a CONIC one centred on the pivot, so the colour turns around
+   the ring instead of sliding across it — a linear gradient on a circle
+   reads as a lighting gradient, not as motion. createConicGradient is
+   Safari 16.4+/Chrome 99+, so the slit falls back to flat mint where it is
+   missing rather than throwing.
+
+   Plain mint at rest. The two colours mean "reading right now", so they
+   would be a lie on an idle viewfinder. */
+const TINT_A = '#CEFDD3';    // --mint
+const TINT_B = '#5065D0';    // --sel
+const SLIT_ROLL   = 0.45;    // cycles per second — slow, but a line needs
+                             // more than a full frame did to read as moving
+const SLIT_CYCLES = 3;       // mint->blue->mint repeats along the slit
+const SLIT_HOLD   = 0.22;    // share of each half-period held at full colour
+const stillTint = matchMedia('(prefers-reduced-motion: reduce)');
+let slitPhase = 0;
+
+/* `cycles` peaks across the gradient, each colour held briefly at its peak:
+   a plain two-stop ramp spends most of its length near the midpoint of mint
+   and blue, a grey-teal that reads as neither of them. */
+function tintStops(g, cycles){
+  const n = cycles * 2, h = SLIT_HOLD / n;
+  for (let i = 0; i <= n; i++){
+    const c = i % 2 ? TINT_B : TINT_A, at = i/n;
+    g.addColorStop(Math.max(0, at - h), c);
+    g.addColorStop(Math.min(1, at + h), c);
+  }
+}
+
+/* A gradient along the segment, phase-shifted.
+
+   The period is a share of the FRAME, not of the segment. Swipe and Field
+   draw their slit ±hypot(W,H) from centre so it always crosses the frame at
+   any angle — about 4500px on a 1030x2000 buffer, of which ~1030 is ever
+   visible. Dividing that segment into three put barely two thirds of one
+   cycle on screen, while Strip's own-height segment showed a full three:
+   measured, the same setting gave "MMMMMMMMM....BBBBBBBBBBBBBBB" in Swipe
+   and ".MMM.BBBBB.MM.BBBBB.MMMBBBBB" in Strip. Pinning the period to the
+   frame's diagonal makes the bands one size in pixels everywhere, so every
+   mode rolls at the same visual rate whatever its slit's drawn length.
+
+   Extended a period past each end so the shift never drags a bare end into
+   view, and the span is a whole number of periods — so shifting by exactly
+   one period is a no-op and the roll loops with no seam. */
+function slitTint(x0, y0, x1, y1){
+  const dx = x1-x0, dy = y1-y0, L = Math.hypot(dx,dy) || 1;
+  const ux = dx/L, uy = dy/L;
+  const P = Math.hypot(W,H) / SLIT_CYCLES;
+  const off = (slitPhase % 1) * P;
+  const periods = Math.ceil(L/P) + 2;            // integer, so the loop closes
+  const span = periods * P;
+  const ax = x0 - ux*P + ux*off, ay = y0 - uy*P + uy*off;
+  const g = hx.createLinearGradient(ax, ay, ax + ux*span, ay + uy*span);
+  tintStops(g, periods);
+  return g;
+}
+
+/* Same idea around the pivot. The phase goes straight into startAngle, and
+   one period is a full turn over SLIT_CYCLES, so a shift of exactly that
+   comes back to itself. */
+function ringTint(px, py){
+  if (!hx.createConicGradient) return `rgb(${MINT})`;
+  const g = hx.createConicGradient((slitPhase % 1) * TAU / SLIT_CYCLES, px, py);
+  tintStops(g, SLIT_CYCLES);
+  return g;
+}
+
+const slitRolling = () => state === 'scanning';
+
 /* The lime line IS the slit — it marks where the scan is reading right now,
    so it is drawn at full strength in every state. The bezel behind it is
    still an instrument: ghosted at rest, bloomed while you are swiping. */
@@ -1586,35 +1601,47 @@ function drawSlit(){
   hx.lineCap = 'butt';
   hx.lineWidth = px4;
   hx.strokeStyle = `rgb(${MINT})`;
+  const roll = slitRolling();
 
   if (S.mode === 'burst'){
     const px = S.cx*W, py = S.cy*H;
-    if (ringR > px4/2){ hx.beginPath(); hx.arc(px,py,ringR,0,TAU); hx.stroke(); }
+    if (ringR > px4/2){
+      if (roll) hx.strokeStyle = ringTint(px, py);
+      hx.beginPath(); hx.arc(px,py,ringR,0,TAU); hx.stroke();
+    }
 
   } else if (S.mode === 'field'){
     const th = S.angle*DEG, nx=-Math.sin(th), ny=Math.cos(th);
     const dxv=Math.cos(th), dyv=Math.sin(th), cx=W/2, cy=H/2;
     const line = s => {
-      hx.beginPath();
-      hx.moveTo(cx+nx*s-dxv*D, cy+ny*s-dyv*D);
-      hx.lineTo(cx+nx*s+dxv*D, cy+ny*s+dyv*D); hx.stroke();
+      const x0=cx+nx*s-dxv*D, y0=cy+ny*s-dyv*D;
+      const x1=cx+nx*s+dxv*D, y1=cy+ny*s+dyv*D;
+      if (roll) hx.strokeStyle = slitTint(x0,y0,x1,y1);
+      hx.beginPath(); hx.moveTo(x0,y0); hx.lineTo(x1,y1); hx.stroke();
     };
     const w = bandHalf();
     line( w + fieldD); line(-(w + fieldD));      // the two opposed slits
-    hx.globalAlpha = .5; hx.lineWidth = px4/2;   // the band edges
-    line(w); line(-w);
+    // the band edges are reference, not the reading head: flat mint
+    hx.strokeStyle = `rgb(${MINT})`;
+    hx.globalAlpha = .5; hx.lineWidth = px4/2;
+    hx.beginPath(); hx.moveTo(cx+nx*w-dxv*D, cy+ny*w-dyv*D);
+    hx.lineTo(cx+nx*w+dxv*D, cy+ny*w+dyv*D); hx.stroke();
+    hx.beginPath(); hx.moveTo(cx-nx*w-dxv*D, cy-ny*w-dyv*D);
+    hx.lineTo(cx-nx*w+dxv*D, cy-ny*w+dyv*D); hx.stroke();
     hx.globalAlpha = 1; hx.lineWidth = px4;
 
   } else if (S.mode === 'strip'){
     const x = W - px4/2;                       // fixed — it never moves
+    if (roll) hx.strokeStyle = slitTint(x,0,x,H);
     hx.beginPath(); hx.moveTo(x,0); hx.lineTo(x,H); hx.stroke();
 
   } else {
     const th = S.angle*DEG, nx=-Math.sin(th), ny=Math.cos(th);
     const dxv=Math.cos(th), dyv=Math.sin(th);
     const bx = W/2 + nx*sweepS, by = H/2 + ny*sweepS;
-    hx.beginPath();
-    hx.moveTo(bx-dxv*D, by-dyv*D); hx.lineTo(bx+dxv*D, by+dyv*D); hx.stroke();
+    const x0=bx-dxv*D, y0=by-dyv*D, x1=bx+dxv*D, y1=by+dyv*D;
+    if (roll) hx.strokeStyle = slitTint(x0,y0,x1,y1);
+    hx.beginPath(); hx.moveTo(x0,y0); hx.lineTo(x1,y1); hx.stroke();
   }
 }
 
@@ -1994,6 +2021,8 @@ function frame(dt){
 
   glow += (glowTarget - glow) * Math.min(1, dt*8);
   waneT += dt;
+  // same shape as waneT: advanced unconditionally, only USED while scanning
+  if (!stillTint.matches) slitPhase += dt * SLIT_ROLL;
 
   if (aaEligible()){
     // live time-displacement: the whole image re-renders every tick.
@@ -2015,8 +2044,8 @@ function frame(dt){
 
   // only while a pass is running: at rest acc is fully painted every frame
   // and covers this anyway, so idle stays exactly as it was
-  if (state === 'scanning'){ drawGuide(dt); guideOn = true; }
-  else if (guideOn){ clearGuide(); guideOn = false; guidePhase = 0; }
+  if (state === 'scanning'){ drawGuide(); guideOn = true; }
+  else if (guideOn){ clearGuide(); guideOn = false; }
 
   drawHud();
 
@@ -2068,6 +2097,7 @@ function setState(next){
     sh.classList.add('recording');
     sh.setAttribute('aria-label','Stop scan');
     waneT = 0;                              // every pass starts at full brightness
+    slitPhase = 0;                          // ...and with mint at the slit's head
     clearAcc();
   }
 }
