@@ -608,7 +608,7 @@ body.scanning #segMode button{opacity:1}
 .splash-card{
   width:320px;max-width:calc(100vw - 32px);
   background:var(--mint);border-radius:30px;
-  padding:17px 27px;margin-top:120px;
+  padding:32px 27px 17px;
   display:flex;flex-direction:column;align-items:center;gap:9px;
   transform:scale(.96);transition:transform .24s var(--ease);
 }
@@ -621,15 +621,17 @@ body.scanning #segMode button{opacity:1}
   font-size:15px;font-weight:700;line-height:1.35;
   text-align:center;color:var(--chip);
 }
-/* 223px wide in a 213px content box: the figure alone bleeds 5px into the
+/* 290px wide in a 266px content box: the figure alone bleeds 12px into the
    card's side padding, which is what the reference shows — the type and
-   the button stay on the 27px margin. Height follows carros.svg's own
-   259x104 aspect at the same 8px inset the width already used. */
+   the button stay on the 27px margin. The negative inline margin pulls the
+   outer width back to 266 so the box still measures to the line exactly.
+   Height follows carros.svg's own 259x104 aspect at the same inset the
+   width already used. */
 .splash-fig{
-  width:223px;height:99px;margin-inline:-5px;flex:none;
+  width:290px;height:129px;margin-inline:-12px;flex:none;
   display:grid;place-items:center;
 }
-.splash-fig img{width:207px;height:83px;display:block}
+.splash-fig img{width:269px;height:108px;display:block}
 .splash-desc{
   align-self:stretch;margin:0;
   font-size:13px;line-height:1.4;text-align:center;color:var(--chip);
@@ -637,7 +639,7 @@ body.scanning #segMode button{opacity:1}
 /* white card, left-aligned, same content width as the paragraph above and
    the button below — a callout rather than a third line of body copy */
 .splash-tip{
-  align-self:stretch;background:#fff;border-radius:16px;
+  align-self:stretch;background:#fff;border-radius:8px;
   padding:10px 14px;display:flex;align-items:center;gap:8px;
 }
 /* the walk-cycle's own first frame, recoloured: reusing the figure from
